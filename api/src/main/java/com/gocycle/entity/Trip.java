@@ -1,4 +1,4 @@
-package com.gocycle.api.entity;
+package com.gocycle.entity;
 
 import javax.persistence.*;
 import java.time.Instant;
@@ -9,55 +9,31 @@ import java.time.LocalTime;
 public class Trip {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
+    @Column(name = "trip_id", nullable = false)
     private Integer id;
 
     @MapsId
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "id", nullable = false)
+    @JoinColumn(name = "trip_id", nullable = false)
     private TripIndicator tripIndicator;
 
-    @Column(name = "\"timestamp\"", nullable = false)
+    @Column(name = "\"timestamp\"")
     private Instant timestamp;
 
-    @Column(name = "duration", nullable = false)
+    @Column(name = "duration")
     private LocalTime duration;
 
-    @Column(name = "\"avgSpeed\"", nullable = false)
+    @Column(name = "\"avgSpeed\"")
     private Double avgSpeed;
 
-    @Column(name = "\"maxSpeed\"", nullable = false)
+    @Column(name = "\"maxSpeed\"")
     private Double maxSpeed;
 
-    @Column(name = "calories", nullable = false)
+    @Column(name = "calories")
     private Integer calories;
 
-    @Column(name = "altitude", nullable = false)
+    @Column(name = "altitude")
     private Double altitude;
-
-    @OneToOne(fetch = FetchType.LAZY, mappedBy = "trip")
-    private User user;
-
-    @MapsId
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id")
-    private TripRoad tripRoad;
-
-    public TripRoad getTripRoad() {
-        return tripRoad;
-    }
-
-    public void setTripRoad(TripRoad tripRoad) {
-        this.tripRoad = tripRoad;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public void setUser(User user) {
-        this.user = user;
-    }
 
     public Double getAltitude() {
         return altitude;

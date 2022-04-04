@@ -1,37 +1,26 @@
-package com.gocycle.api.entity;
+package com.gocycle.entity;
 
 import javax.persistence.*;
 import java.time.Instant;
-import java.util.List;
 
 @Entity
 @Table(name = "trip_indicator")
 public class TripIndicator {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
+    @Column(name = "trip_indicator_id", nullable = false)
     private Integer id;
+
     @MapsId
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id")
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "trip_indicator_id", nullable = false)
     private Indicator indicator;
 
-    @Column(name = "\"timestamp\"", nullable = false)
+    @Column(name = "\"timestamp\"")
     private Instant timestamp;
 
-    @Column(name = "point", nullable = false)
+    @Column(name = "point")
     private String point;
-
-    @OneToMany(mappedBy = "tripIndicator")
-    private List<Trip> trip;
-
-    public List<Trip> getTrip() {
-        return trip;
-    }
-
-    public void setTrip(List<Trip> trip) {
-        this.trip = trip;
-    }
 
     public String getPoint() {
         return point;

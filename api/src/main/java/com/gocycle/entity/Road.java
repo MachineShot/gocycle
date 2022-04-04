@@ -1,4 +1,4 @@
-package com.gocycle.api.entity;
+package com.gocycle.entity;
 
 import javax.persistence.*;
 
@@ -7,16 +7,20 @@ import javax.persistence.*;
 public class Road {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
+    @Column(name = "road_id", nullable = false)
     private Integer id;
 
     @MapsId
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "id", nullable = false)
+    @JoinColumn(name = "road_id", nullable = false)
     private TripRoad tripRoad;
 
+    @Column(name = "line")
+    private String line;
+
+    @Lob
     @Column(name = "quality")
-    private Double quality;
+    private String quality;
 
     @Column(name = "speed")
     private Double speed;
@@ -29,12 +33,20 @@ public class Road {
         this.speed = speed;
     }
 
-    public Double getQuality() {
+    public String getQuality() {
         return quality;
     }
 
-    public void setQuality(Double quality) {
+    public void setQuality(String quality) {
         this.quality = quality;
+    }
+
+    public String getLine() {
+        return line;
+    }
+
+    public void setLine(String line) {
+        this.line = line;
     }
 
     public TripRoad getTripRoad() {

@@ -1,50 +1,27 @@
-package com.gocycle.api.entity;
+package com.gocycle.entity;
 
 import javax.persistence.*;
 import java.time.Instant;
-import java.util.List;
 
 @Entity
 @Table(name = "trip_road")
 public class TripRoad {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
+    @Column(name = "trip_road_id", nullable = false)
     private Integer id;
 
-    @Column(name = "\"startTimestamp\"", nullable = false)
+    @Column(name = "\"startTimestamp\"")
     private Instant startTimestamp;
 
-    @Column(name = "\"endTimestamp\"", nullable = false)
+    @Column(name = "\"endTimestamp\"")
     private Instant endTimestamp;
 
-    @Column(name = "\"startPoint\"", nullable = false)
+    @Column(name = "\"startPoint\"")
     private String startPoint;
 
-    @Column(name = "\"endPoint\"", nullable = false)
+    @Column(name = "\"endPoint\"")
     private String endPoint;
-
-    @OneToOne(fetch = FetchType.LAZY, mappedBy = "tripRoad")
-    private Trip trip;
-
-    @OneToMany(mappedBy = "tripRoad")
-    private List<Road> road;
-
-    public List<Road> getRoad() {
-        return road;
-    }
-
-    public void setRoad(List<Road> road) {
-        this.road = road;
-    }
-
-    public Trip getTrip() {
-        return trip;
-    }
-
-    public void setTrip(Trip trip) {
-        this.trip = trip;
-    }
 
     public String getEndPoint() {
         return endPoint;

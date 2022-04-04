@@ -1,43 +1,31 @@
-package com.gocycle.api.entity;
+package com.gocycle.entity;
 
 import javax.persistence.*;
 
 @Entity
-@Table(name = "user")
+@Table(name = "\"user\"")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id", nullable = false)
+    @Column(name = "user_id", nullable = false)
     private Integer id;
+
     @MapsId
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
     private Trip trip;
 
     @Lob
-    @Column(name = "username", nullable = false)
+    @Column(name = "username")
     private String username;
 
     @Lob
-    @Column(name = "password", nullable = false)
+    @Column(name = "password")
     private String password;
 
     @Lob
-    @Column(name = "email", nullable = false)
+    @Column(name = "email")
     private String email;
-
-    @MapsId
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "id")
-    private UserTransport userTransport;
-
-    public UserTransport getUserTransport() {
-        return userTransport;
-    }
-
-    public void setUserTransport(UserTransport userTransport) {
-        this.userTransport = userTransport;
-    }
 
     public String getEmail() {
         return email;
