@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.util.DisplayMetrics;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 public class MainActivity extends AppCompatActivity{
     private final int REQUEST_PERMISSIONS_REQUEST_CODE = 1;
     private MapView map = null;
+    private MyLocationNewOverlay mLocationOverlay;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -61,6 +63,11 @@ public class MainActivity extends AppCompatActivity{
         mapController.setZoom(9.5);
         GeoPoint startPoint = new GeoPoint(54.9039276,23.9555953);
         mapController.setCenter(startPoint);
+
+        // My Location overlay
+        this.mLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(this),map);
+        this.mLocationOverlay.enableMyLocation();
+        map.getOverlays().add(this.mLocationOverlay);
     }
 
     @Override
