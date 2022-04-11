@@ -3,7 +3,9 @@ package com.example.gocycle;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.os.StrictMode;
 import android.preference.PreferenceManager;
 import android.util.DisplayMetrics;
 
@@ -12,10 +14,16 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import org.osmdroid.api.IMapController;
+import org.osmdroid.bonuspack.routing.OSRMRoadManager;
+import org.osmdroid.bonuspack.routing.Road;
+import org.osmdroid.bonuspack.routing.RoadManager;
+import org.osmdroid.bonuspack.routing.RoadNode;
 import org.osmdroid.config.Configuration;
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
 import org.osmdroid.util.GeoPoint;
 import org.osmdroid.views.MapView;
+import org.osmdroid.views.overlay.Marker;
+import org.osmdroid.views.overlay.Polyline;
 import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider;
 import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay;
 
@@ -28,6 +36,11 @@ public class MainActivity extends AppCompatActivity{
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Disabling network calls
+        // TODO: have a look at the OSMNavigator source code, where network calls are done in async tasks
+        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+        StrictMode.setThreadPolicy(policy);
+
         super.onCreate(savedInstanceState);
 
         //handle permissions first, before map is created. not depicted here
@@ -68,6 +81,54 @@ public class MainActivity extends AppCompatActivity{
         this.mLocationOverlay = new MyLocationNewOverlay(new GpsMyLocationProvider(this),map);
         this.mLocationOverlay.enableMyLocation();
         map.getOverlays().add(this.mLocationOverlay);
+
+        // Marker overlay
+        Marker startMarker = new Marker(map);
+        startMarker.setPosition(startPoint);
+        startMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
+        map.getOverlays().add(startMarker);
+
+        // Refresh
+        map.invalidate();
+
+        // Marker title, icon
+        startMarker.setIcon(getResources().getDrawable(R.drawable.marker_poi));
+        startMarker.setTitle("Start point");
+
+        // Routing
+        RoadManager roadManager = new OSRMRoadManager(this, "MyOwnUserAgent/1.0");
+        ArrayList<GeoPoint> waypoints = new ArrayList<GeoPoint>();
+        waypoints.add(startPoint);
+        GeoPoint endPoint = new GeoPoint(54.9003847,23.9600667);
+        waypoints.add(endPoint);
+
+        Road road = roadManager.getRoad(waypoints);
+
+        Polyline roadOverlay = RoadManager.buildRoadOverlay(road);
+
+        map.getOverlays().add(roadOverlay);
+
+        map.invalidate();
+
+        // Routing for bicycles
+        ((OSRMRoadManager)roadManager).setMean(OSRMRoadManager.MEAN_BY_BIKE);
+
+        // Route steps
+        Drawable nodeIcon = getResources().getDrawable(org.osmdroid.bonuspack.R.drawable.marker_default);
+        for (int i=0; i<road.mNodes.size(); i++){
+            RoadNode node = road.mNodes.get(i);
+            Marker nodeMarker = new Marker(map);
+            nodeMarker.setPosition(node.mLocation);
+            nodeMarker.setIcon(nodeIcon);
+            nodeMarker.setTitle("Step "+i);
+            map.getOverlays().add(nodeMarker);
+
+            nodeMarker.setSnippet(node.mInstructions);
+            nodeMarker.setSubDescription(Road.getLengthDurationText(this, node.mLength, node.mDuration));
+
+            Drawable icon = getResources().getDrawable(R.drawable.ic_continue);
+            nodeMarker.setImage(icon);
+        }
     }
 
     @Override
