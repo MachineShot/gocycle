@@ -18,15 +18,71 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.GoCycle"
         tools:replace="android:allowBackup">
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
+        <activity android:name="com.example.gocycle.MapActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.NoTitleBar"
+            android:hardwareAccelerated="false">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:host="*" android:scheme="http" android:pathPattern="/*.kml" />
+                <data android:host="*" android:scheme="https" android:pathPattern="/*.kml" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:scheme="file"
+                    android:pathPattern=".*\\.kml"/>
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:scheme="file"
+                    android:pathPattern=".*\\.kmz"/>
+                <data
+                    android:host="*"
+                    android:mimeType="*/*"
+                    android:scheme="file"
+                    android:pathPattern=".*\\.json"/>
+            </intent-filter>
         </activity>
+        <activity
+            android:name="com.example.gocycle.RouteActivity"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="com.example.gocycle.POIActivity"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="com.example.gocycle.KmlTreeActivity"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="com.example.gocycle.KmlStylesActivity"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="com.example.gocycle.KmlStyleActivity"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
+            android:name="com.example.gocycle.StartSharingActivity"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+        <activity
+            android:name="com.example.gocycle.FriendsActivity"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
     </application>
 
 </manifest>
