@@ -976,6 +976,10 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             switch (mWhichRouteProvider){
                 case OSRM:
                     roadManager = new OSRMRoadManager(mContext, userAgent);
+                    // Connecting to our own OSRM server
+                    //((OSRMRoadManager)roadManager).setService("http://127.0.0.1:5000/");
+                    //((OSRMRoadManager)roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android
+                    //((OSRMRoadManager)roadManager).setMean("route/v1/driving/");
                     break;
                 case GRAPHHOPPER_FASTEST:
                     roadManager = new GraphHopperRoadManager(graphHopperApiKey, false);

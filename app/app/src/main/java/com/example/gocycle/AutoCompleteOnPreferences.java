@@ -3,11 +3,15 @@ package com.example.gocycle;
 import java.util.LinkedList;
 import org.json.JSONArray;
 import org.json.JSONException;
+
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+
 import androidx.appcompat.widget.AppCompatAutoCompleteTextView;
 
 /**
