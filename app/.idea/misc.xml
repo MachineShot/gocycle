@@ -12,9 +12,13 @@
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/layout/kml_main.xml" value="0.36666666666666664" />
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/layout/kml_styles.xml" value="0.36666666666666664" />
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/layout/main.xml" value="0.16394927536231885" />
+        <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/layout/sensor.xml" value="0.29528985507246375" />
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/kml_item_menu.xml" value="0.36666666666666664" />
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/kml_option_menu.xml" value="0.36666666666666664" />
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/map_menu.xml" value="0.36666666666666664" />
+        <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/option_menu.xml" value="0.36666666666666664" />
+        <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/style_item_menu.xml" value="0.36666666666666664" />
+        <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/style_option_menu.xml" value="0.36666666666666664" />
       </map>
     </option>
   </component>

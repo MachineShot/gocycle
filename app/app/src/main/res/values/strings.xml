@@ -73,6 +73,7 @@
     <string name="menu_kml_styles">Edit Shared Styles...</string>
     <string name="menu_save_file">Save as...</string>
     <string name="menu_kml_clear">Clear</string>
+    <string name="menu_sensor">Sensors</string>
 
     <!-- kml_item_menu-->
     <string name="kml_item_menu_cut">Cut</string>
@@ -103,5 +104,14 @@
     <!-- FriendsActivity.java -->
     <string name="FriendsActivity_Title">Friends</string>
     <string name="FriendsActivity_EmptyList">There is no friend currently in your group.</string>
+    <string name="title_activity_sensor">SensorActivity</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="first_fragment_label">First Fragment</string>
+    <string name="second_fragment_label">Second Fragment</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+
+    <string name="hello_first_fragment">Hello first fragment</string>
+    <string name="hello_second_fragment">Hello second fragment. Arg: %1$s</string>
 
 </resources>

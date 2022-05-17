@@ -29,6 +29,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -978,8 +979,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                     roadManager = new OSRMRoadManager(mContext, userAgent);
                     // Connecting to our own OSRM server
                     //((OSRMRoadManager)roadManager).setService("http://127.0.0.1:5000/");
-                    //((OSRMRoadManager)roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android
-                    //((OSRMRoadManager)roadManager).setMean("route/v1/driving/");
+                    ((OSRMRoadManager)roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android emulator
+                    ((OSRMRoadManager)roadManager).setMean("route/v1/driving/");
                     break;
                 case GRAPHHOPPER_FASTEST:
                     roadManager = new GraphHopperRoadManager(graphHopperApiKey, false);
@@ -1573,6 +1574,9 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     @Override public boolean onOptionsItemSelected(MenuItem item) {
         Intent myIntent;
         switch (item.getItemId()) {
+            case R.id.menu_sensor:
+                myIntent = new Intent(this, SensorActivity.class);
+                startActivity(myIntent);
             case R.id.menu_sharing:
                 return mFriendsManager.onOptionsItemSelected(item);
             case R.id.menu_itinerary:
