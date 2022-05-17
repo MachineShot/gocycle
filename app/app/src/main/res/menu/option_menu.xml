@@ -116,6 +116,10 @@
 					android:id="@+id/menu_pois"
 					android:icon="@drawable/ic_menu_poi"
 					android:title="@string/menu_pois" />
+				<item
+					android:id="@+id/menu_sensor"
+					android:icon="@drawable/osm_ic_follow_me"
+					android:title="@string/menu_sensor" />
 			</group>
 		</menu>
 	</item>
