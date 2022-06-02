@@ -11,6 +11,7 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Environment;
+<<<<<<< HEAD
 import android.os.Handler;
 import android.util.Log;
 import android.widget.ArrayAdapter;
@@ -23,16 +24,25 @@ import org.json.JSONObject;
 import org.osmdroid.bonuspack.utils.BonusPackHelper;
 import org.osmdroid.bonuspack.utils.HttpConnection;
 
+=======
+import android.util.Log;
+import android.widget.TextView;
+import android.widget.Toast;
+
+>>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 
+<<<<<<< HEAD
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+=======
+>>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
 public class SensorActivity extends Activity {
 
     SensorManager sm = null;
@@ -41,8 +51,11 @@ public class SensorActivity extends Activity {
     final float kFilteringFactor = 0.5f;
     static float rollingX=0, rollingY=0, rollingZ=0;
 
+<<<<<<< HEAD
     protected String mUserAgent = "com.example.gocycle/1.0";
 
+=======
+>>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
     SensorEventListener sel = new SensorEventListener(){
         public void onAccuracyChanged(Sensor sensor, int accuracy) {}
         public void onSensorChanged(SensorEvent event) {
@@ -61,6 +74,7 @@ public class SensorActivity extends Activity {
             float accelZ = values[2] - rollingZ;
 
             // Use the acceleration data.
+<<<<<<< HEAD
 
             Handler handler = new Handler();
             handler.postDelayed(new Runnable() {
@@ -85,6 +99,22 @@ public class SensorActivity extends Activity {
             String entry = values[0] + "," + values[1] + "," + values[2] + "\n"; //Unfiltered data
             String entry1 = accelX + "," + accelY + "," + accelZ + "\n"; //Filtered data
 
+=======
+            
+            if(accelY > 5)
+            {
+                textView1.setBackgroundColor(Color.RED);
+            }
+            else
+            {
+                textView1.setBackgroundColor(Color.BLACK);
+            }
+            textView1.setText("Unfiltered\nx: "+values[0]+"\ny: "+values[1]+"\nz: "+values[2]+
+                    "\nFiltered\nx: "+accelX+"\ny: "+accelY+"\nz: "+accelZ);
+
+            String entry = values[0] + "," + values[1] + "," + values[2] + "\n"; //Unfiltered data
+            String entry1 = accelX + "," + accelY + "," + accelZ + "\n"; //Filtered data
+>>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
             try {
 
                 File sdCard = Environment.getExternalStorageDirectory();
@@ -116,6 +146,7 @@ public class SensorActivity extends Activity {
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
+<<<<<<< HEAD
              */
         }
     };
@@ -145,6 +176,11 @@ public class SensorActivity extends Activity {
         });
     }
 
+=======
+        }
+    };
+
+>>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

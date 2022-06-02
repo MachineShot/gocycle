@@ -979,7 +979,11 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                     roadManager = new OSRMRoadManager(mContext, userAgent);
                     // Connecting to our own OSRM server
                     //((OSRMRoadManager)roadManager).setService("http://127.0.0.1:5000/");
+<<<<<<< HEAD
                     ((OSRMRoadManager)roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android emulator
+=======
+                    ((OSRMRoadManager)roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android
+>>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
                     ((OSRMRoadManager)roadManager).setMean("route/v1/driving/");
                     break;
                 case GRAPHHOPPER_FASTEST:
