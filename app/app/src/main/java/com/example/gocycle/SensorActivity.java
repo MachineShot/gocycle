@@ -11,7 +11,6 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.os.Environment;
-<<<<<<< HEAD
 import android.os.Handler;
 import android.util.Log;
 import android.widget.ArrayAdapter;
@@ -23,26 +22,18 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.osmdroid.bonuspack.utils.BonusPackHelper;
 import org.osmdroid.bonuspack.utils.HttpConnection;
-
-=======
 import android.util.Log;
 import android.widget.TextView;
 import android.widget.Toast;
-
->>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
-
-<<<<<<< HEAD
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
-=======
->>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
 public class SensorActivity extends Activity {
 
     SensorManager sm = null;
@@ -50,12 +41,9 @@ public class SensorActivity extends Activity {
     List list;
     final float kFilteringFactor = 0.5f;
     static float rollingX=0, rollingY=0, rollingZ=0;
-
-<<<<<<< HEAD
     protected String mUserAgent = "com.example.gocycle/1.0";
+    NodeCallback nodeCallback;
 
-=======
->>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
     SensorEventListener sel = new SensorEventListener(){
         public void onAccuracyChanged(Sensor sensor, int accuracy) {}
         public void onSensorChanged(SensorEvent event) {
@@ -74,7 +62,10 @@ public class SensorActivity extends Activity {
             float accelZ = values[2] - rollingZ;
 
             // Use the acceleration data.
-<<<<<<< HEAD
+            textView1.setText("Unfiltered\nx: "+values[0]+"\ny: "+values[1]+"\nz: "+values[2]+
+                    "\nFiltered\nx: "+accelX+"\ny: "+accelY+"\nz: "+accelZ);
+            String entry = values[0] + "," + values[1] + "," + values[2] + "\n"; //Unfiltered data
+            String entry1 = accelX + "," + accelY + "," + accelZ + "\n"; //Filtered data
 
             Handler handler = new Handler();
             handler.postDelayed(new Runnable() {
@@ -84,7 +75,7 @@ public class SensorActivity extends Activity {
                     {
                         textView1.setBackgroundColor(Color.RED);
                         Log.e(BonusPackHelper.LOG_TAG, "Duobe");
-                        getOSMId();
+                        getMatch(nodeCallback, "23.957570,54.905317;23.963235,54.904361", true);
                     }
                     else
                     {
@@ -92,29 +83,8 @@ public class SensorActivity extends Activity {
                     }
                 }
             }, 2000);
-            //textView1.setText("Unfiltered\nx: "+values[0]+"\ny: "+values[1]+"\nz: "+values[2]+
-                    "\nFiltered\nx: "+accelX+"\ny: "+accelY+"\nz: "+accelZ);
 
             /*
-            String entry = values[0] + "," + values[1] + "," + values[2] + "\n"; //Unfiltered data
-            String entry1 = accelX + "," + accelY + "," + accelZ + "\n"; //Filtered data
-
-=======
-            
-            if(accelY > 5)
-            {
-                textView1.setBackgroundColor(Color.RED);
-            }
-            else
-            {
-                textView1.setBackgroundColor(Color.BLACK);
-            }
-            textView1.setText("Unfiltered\nx: "+values[0]+"\ny: "+values[1]+"\nz: "+values[2]+
-                    "\nFiltered\nx: "+accelX+"\ny: "+accelY+"\nz: "+accelZ);
-
-            String entry = values[0] + "," + values[1] + "," + values[2] + "\n"; //Unfiltered data
-            String entry1 = accelX + "," + accelY + "," + accelZ + "\n"; //Filtered data
->>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
             try {
 
                 File sdCard = Environment.getExternalStorageDirectory();
@@ -146,41 +116,27 @@ public class SensorActivity extends Activity {
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
-<<<<<<< HEAD
              */
         }
     };
 
-    private void getNearest() {
-        Call<List<Nearest>> call = RetrofitClient.getInstance().getMyApi().getNearest();
-        call.enqueue(new Callback<List<Nearest>>() {
+    private void getMatch(NodeCallback nodeCallback, String coordinates, boolean annotations) {
+        Call<Match> call = RetrofitClient.getInstance().getMyApi().getMatch(coordinates, annotations);
+        //Log.e(BonusPackHelper.LOG_TAG, "Call URL: " + call.request().url().toString());
+        call.enqueue(new Callback<Match>() {
             @Override
-            public void onResponse(Call<List<Nearest>> call, Response<List<Nearest>> response) {
-                List<Nearest> nearestList = response.body();
-                String[] nodes = new String[nearestList.size()];
-
-                for (int i = 0; i < nearestList.size(); i++) {
-                    for (int j = 0; j < nearestList.get(i).getWaypoints().length; j++) {
-                        nodes[i] = nearestList.get(i).getWaypoints()[j].getNodes().toString();
-                    }
-                }
-
-                textView1.setText(nodes.toString());
+            public void onResponse(Call<Match> call, Response<Match> response) {
+                Match match = response.body();
+                nodeCallback.onSuccess(match.getMatchings()[0].getLegs()[0].getAnnotation().getNodes());
             }
 
             @Override
-            public void onFailure(Call<List<Nearest>> call, Throwable t) {
+            public void onFailure(Call<Match> call, Throwable t) {
                 Toast.makeText(getApplicationContext(), "An error has occured", Toast.LENGTH_LONG).show();
             }
-
         });
     }
 
-=======
-        }
-    };
-
->>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

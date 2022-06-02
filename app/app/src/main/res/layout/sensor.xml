@@ -7,33 +7,13 @@
 
     <TextView
         android:id="@+id/textView1"
-<<<<<<< HEAD
-        android:layout_width="186dp"
-        android:layout_height="118dp"
-=======
-        android:layout_width="204dp"
-        android:layout_height="214dp"
->>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
+        android:layout_width="235dp"
+        android:layout_height="189dp"
         android:layout_alignParentLeft="true"
         android:layout_alignParentTop="true"
         android:text="TextView"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-<<<<<<< HEAD
-        app:layout_constraintHorizontal_bias="0.497"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintVertical_bias="0.164" />
-
-    <TextView
-        android:id="@+id/textView2"
-        android:layout_width="211dp"
-        android:layout_height="213dp"
-        android:text="TextView"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-=======
->>>>>>> d41b822a26f3791612ebd08effb48b718d5b0657
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 

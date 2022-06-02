@@ -1,24 +1,25 @@
 package com.example.gocycle;
 
-import com.google.gson.annotations.SerializedName;
-
-public class Waypoint {
-    @SerializedName("hint")
+public class Tracepoint {
+    private long waypointIndex;
+    private long matchingsIndex;
+    private long alternativesCount;
     private String hint;
-    @SerializedName("nodes")
-    private long[] nodes;
-    @SerializedName("distance")
     private double distance;
-    @SerializedName("name")
     private String name;
-    @SerializedName("location")
     private double[] location;
+
+    public long getWaypointIndex() { return waypointIndex; }
+    public void setWaypointIndex(long value) { this.waypointIndex = value; }
+
+    public long getMatchingsIndex() { return matchingsIndex; }
+    public void setMatchingsIndex(long value) { this.matchingsIndex = value; }
+
+    public long getAlternativesCount() { return alternativesCount; }
+    public void setAlternativesCount(long value) { this.alternativesCount = value; }
 
     public String getHint() { return hint; }
     public void setHint(String value) { this.hint = value; }
-
-    public long[] getNodes() { return nodes; }
-    public void setNodes(long[] value) { this.nodes = value; }
 
     public double getDistance() { return distance; }
     public void setDistance(double value) { this.distance = value; }
