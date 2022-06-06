@@ -113,5 +113,9 @@
 
     <string name="hello_first_fragment">Hello first fragment</string>
     <string name="hello_second_fragment">Hello second fragment. Arg: %1$s</string>
+    <string name="remote_service_started">Service started</string>
+    <string name="remote_service_stopped">Service stopped</string>
+    <string name="remote_service_connected">Connected to service</string>
+    <string name="remote_service_disconnected">Disconnected from service</string>
 
 </resources>

@@ -4,9 +4,11 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.TypedArray;
@@ -35,9 +37,15 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.res.ResourcesCompat;
 
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Message;
+import android.os.Messenger;
 import android.os.ParcelFileDescriptor;
+import android.os.RemoteException;
 import android.preference.PreferenceManager;
 import android.text.InputType;
+import android.util.Log;
 import android.view.ContextMenu;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.LayoutInflater;
@@ -131,12 +139,16 @@ import java.util.Stack;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
 public class MapActivity extends Activity implements MapEventsReceiver, LocationListener, SensorEventListener, MapView.OnFirstLayoutListener {
     protected MapView map;
 
     protected GeoPoint startPoint, destinationPoint;
     protected ArrayList<GeoPoint> viaPoints;
-    protected static int START_INDEX=-2, DEST_INDEX=-1;
+    protected static int START_INDEX = -2, DEST_INDEX = -1;
     protected FolderOverlay mItineraryMarkers;
     //for departure, destination and viapoints
     protected Marker markerStart, markerDestination;
@@ -158,7 +170,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     protected Polyline[] mRoadOverlays;
     protected FolderOverlay mRoadNodeMarkers;
     protected static final int ROUTE_REQUEST = 1;
-    static final int OSRM=0, GRAPHHOPPER_FASTEST=1, GRAPHHOPPER_BICYCLE=2, GRAPHHOPPER_PEDESTRIAN=3, GOOGLE_FASTEST=4;
+    static final int OSRM = 0, GRAPHHOPPER_FASTEST = 1, GRAPHHOPPER_BICYCLE = 2, GRAPHHOPPER_PEDESTRIAN = 3, GOOGLE_FASTEST = 4;
     int mWhichRouteProvider;
 
     public static ArrayList<POI> mPOIs; //made static to pass between activities
@@ -181,21 +193,32 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     OnlineTileSourceBase MAPBOXSATELLITELABELLED;
     boolean mNightMode;
 
-    static final String userAgent = BuildConfig.APPLICATION_ID+"/"+BuildConfig.VERSION_NAME;
+    static final String userAgent = BuildConfig.APPLICATION_ID + "/" + BuildConfig.VERSION_NAME;
 
     static String graphHopperApiKey;
     static String flickrApiKey;
     static String geonamesAccount;
     static String mapzenApiKey;
 
-    @Override public void onCreate(Bundle savedInstanceState) {
+    long[] nodes;
+    /**
+     * Messenger for communicating with service.
+     */
+    Messenger mService = null;
+    /**
+     * Flag indicating whether we have called bind on the service.
+     */
+    boolean mIsBound;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
 
         MapsForgeTileSource.createInstance(getApplication());
 
-        LayoutInflater inflater = (LayoutInflater)getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        LayoutInflater inflater = (LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         View v = inflater.inflate(R.layout.main, null);
         setContentView(v);
 
@@ -233,7 +256,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         map.setMinZoomLevel(1.0);
         map.setMaxZoomLevel(21.0);
         map.setVerticalMapRepetitionEnabled(false);
-        map.setScrollableAreaLimitLatitude(TileSystem.MaxLatitude,-TileSystem.MaxLatitude, 0/*map.getHeight()/2*/);
+        map.setScrollableAreaLimitLatitude(TileSystem.MaxLatitude, -TileSystem.MaxLatitude, 0/*map.getHeight()/2*/);
         //Toast.makeText(this, "H="+map.getHeight(), Toast.LENGTH_LONG).show();
 
         IMapController mapController = map.getController();
@@ -242,20 +265,20 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         MapEventsOverlay overlay = new MapEventsOverlay(this);
         map.getOverlays().add(overlay);
 
-        mLocationManager = (LocationManager)getSystemService(LOCATION_SERVICE);
+        mLocationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
 
         //mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         //mOrientation = mSensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION);
 
         //map prefs:
-        mapController.setZoom((double)prefs.getFloat("MAP_ZOOM_LEVEL_F", 5));
+        mapController.setZoom((double) prefs.getFloat("MAP_ZOOM_LEVEL_F", 5));
         mapController.setCenter(new GeoPoint((double) prefs.getFloat("MAP_CENTER_LAT", 48.5f),
-                (double)prefs.getFloat("MAP_CENTER_LON", 2.5f)));
+                (double) prefs.getFloat("MAP_CENTER_LON", 2.5f)));
 
         myLocationOverlay = new DirectedLocationOverlay(this);
         map.getOverlays().add(myLocationOverlay);
 
-        if (savedInstanceState == null){
+        if (savedInstanceState == null) {
             Location location = null;
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 location = mLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
@@ -273,7 +296,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             destinationPoint = null;
             viaPoints = new ArrayList<GeoPoint>();
         } else {
-            myLocationOverlay.setLocation((GeoPoint)savedInstanceState.getParcelable("location"));
+            myLocationOverlay.setLocation((GeoPoint) savedInstanceState.getParcelable("location"));
             //TODO: restore other aspects of myLocationOverlay...
             startPoint = savedInstanceState.getParcelable("start");
             destinationPoint = savedInstanceState.getParcelable("destination");
@@ -291,14 +314,14 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         updateUIWithItineraryMarkers();
 
         //Tracking system:
-        mTrackingModeButton = (Button)findViewById(R.id.buttonTrackingMode);
+        mTrackingModeButton = (Button) findViewById(R.id.buttonTrackingMode);
         mTrackingModeButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
                 mTrackingMode = !mTrackingMode;
                 updateUIWithTrackingMode();
             }
         });
-        if (savedInstanceState != null){
+        if (savedInstanceState != null) {
             mTrackingMode = savedInstanceState.getBoolean("tracking_mode");
             updateUIWithTrackingMode();
         } else
@@ -309,7 +332,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         AutoCompleteOnPreferences departureText = (AutoCompleteOnPreferences) findViewById(R.id.editDeparture);
         departureText.setPrefKeys(SHARED_PREFS_APPKEY, PREF_LOCATIONS_KEY);
 
-        Button searchDepButton = (Button)findViewById(R.id.buttonSearchDep);
+        Button searchDepButton = (Button) findViewById(R.id.buttonSearchDep);
         searchDepButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
                 handleSearchButton(START_INDEX, R.id.editDeparture);
@@ -319,7 +342,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         AutoCompleteOnPreferences destinationText = (AutoCompleteOnPreferences) findViewById(R.id.editDestination);
         destinationText.setPrefKeys(SHARED_PREFS_APPKEY, PREF_LOCATIONS_KEY);
 
-        Button searchDestButton = (Button)findViewById(R.id.buttonSearchDest);
+        Button searchDestButton = (Button) findViewById(R.id.buttonSearchDest);
         searchDestButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
                 handleSearchButton(DEST_INDEX, R.id.editDestination);
@@ -330,7 +353,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         expander.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
                 View searchPanel = findViewById(R.id.search_panel);
-                if (searchPanel.getVisibility() == View.VISIBLE){
+                if (searchPanel.getVisibility() == View.VISIBLE) {
                     searchPanel.setVisibility(View.GONE);
                 } else {
                     searchPanel.setVisibility(View.VISIBLE);
@@ -351,7 +374,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         mRoadNodeMarkers.setName("Route Steps");
         map.getOverlays().add(mRoadNodeMarkers);
 
-        if (savedInstanceState != null){
+        if (savedInstanceState != null) {
             //STATIC mRoad = savedInstanceState.getParcelable("road");
             updateUIWithRoads(mRoads);
         }
@@ -367,12 +390,12 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         setPOITagButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 //Hide the soft keyboard:
-                InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
                 imm.hideSoftInputFromWindow(poiTagText.getWindowToken(), 0);
                 //Start search:
                 String feature = poiTagText.getText().toString();
                 if (!feature.equals(""))
-                    Toast.makeText(v.getContext(), "Searching:\n"+feature, Toast.LENGTH_LONG).show();
+                    Toast.makeText(v.getContext(), "Searching:\n" + feature, Toast.LENGTH_LONG).show();
                 getPOIAsync(feature);
             }
         });
@@ -385,14 +408,14 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         mPoiMarkers.mTextAnchorV = 0.27f;
         mPoiMarkers.getTextPaint().setTextSize(12 * getResources().getDisplayMetrics().density);
         map.getOverlays().add(mPoiMarkers);
-        if (savedInstanceState != null){
+        if (savedInstanceState != null) {
             //STATIC - mPOIs = savedInstanceState.getParcelableArrayList("poi");
             updateUIWithPOI(mPOIs, "");
         }
 
         //KML handling:
         mKmlOverlay = null;
-        if (savedInstanceState != null){
+        if (savedInstanceState != null) {
             //STATIC - mKmlDocument = savedInstanceState.getParcelable("kml");
             updateUIWithKml();
         } else { //first launch:
@@ -401,7 +424,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             mKmlClipboard = new KmlFolder();
             //check if intent has been passed with a kml URI to load (url or file)
             Intent onCreateIntent = getIntent();
-            if (onCreateIntent.getAction().equals(Intent.ACTION_VIEW)){
+            if (onCreateIntent.getAction().equals(Intent.ACTION_VIEW)) {
                 String uri = onCreateIntent.getDataString();
                 openFile(uri, true, false);
             }
@@ -452,8 +475,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         }
     }
 
-    void setViewOn(BoundingBox bb){
-        if (bb != null){
+    void setViewOn(BoundingBox bb) {
+        if (bb != null) {
             map.zoomToBoundingBox(bb, true);
         }
     }
@@ -476,13 +499,13 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     }
     //---
 
-    void savePrefs(){
+    void savePrefs() {
         SharedPreferences prefs = getSharedPreferences("OSMNAVIGATOR", MODE_PRIVATE);
         SharedPreferences.Editor ed = prefs.edit();
-        ed.putFloat("MAP_ZOOM_LEVEL_F", (float)map.getZoomLevelDouble());
+        ed.putFloat("MAP_ZOOM_LEVEL_F", (float) map.getZoomLevelDouble());
         GeoPoint c = (GeoPoint) map.getMapCenter();
-        ed.putFloat("MAP_CENTER_LAT", (float)c.getLatitude());
-        ed.putFloat("MAP_CENTER_LON", (float)c.getLongitude());
+        ed.putFloat("MAP_CENTER_LAT", (float) c.getLatitude());
+        ed.putFloat("MAP_CENTER_LON", (float) c.getLongitude());
         View searchPanel = findViewById(R.id.search_panel);
         ed.putInt("PANEL_VISIBILITY", searchPanel.getVisibility());
         MapTileProviderBase tileProvider = map.getTileProvider();
@@ -496,7 +519,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     /**
      * callback to store activity status before a restart (orientation change for instance)
      */
-    @Override protected void onSaveInstanceState (Bundle outState){
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
         outState.putParcelable("location", myLocationOverlay.getLocation());
         outState.putBoolean("tracking_mode", mTrackingMode);
         outState.putParcelable("start", startPoint);
@@ -511,7 +535,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         savePrefs();
     }
 
-    @Override protected void onActivityResult (int requestCode, int resultCode, Intent intent) {
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
         switch (requestCode) {
             case FriendsManager.START_SHARING_REQUEST:
             case FriendsManager.FRIENDS_REQUEST:
@@ -574,7 +599,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 		return bestProvider;
 	} */
 
-    boolean startLocationUpdates(){
+    boolean startLocationUpdates() {
         boolean result = false;
         for (final String provider : mLocationManager.getProviders(true)) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -585,7 +610,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         return result;
     }
 
-    @Override protected void onResume() {
+    @Override
+    protected void onResume() {
         super.onResume();
         boolean isOneProviderEnabled = startLocationUpdates();
         myLocationOverlay.setEnabled(isOneProviderEnabled);
@@ -595,7 +621,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         mFriendsManager.onResume();
     }
 
-    @Override protected void onPause() {
+    @Override
+    protected void onPause() {
         super.onPause();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             mLocationManager.removeUpdates(this);
@@ -605,10 +632,10 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         savePrefs();
     }
 
-    void updateUIWithTrackingMode(){
-        if (mTrackingMode){
+    void updateUIWithTrackingMode() {
+        if (mTrackingMode) {
             mTrackingModeButton.setBackgroundResource(R.drawable.btn_tracking_on);
-            if (myLocationOverlay.isEnabled()&& myLocationOverlay.getLocation() != null){
+            if (myLocationOverlay.isEnabled() && myLocationOverlay.getLocation() != null) {
                 map.getController().animateTo(myLocationOverlay.getLocation());
             }
             map.setMapOrientation(-mAzimuthAngleSpeed);
@@ -625,7 +652,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     /**
      * Reverse Geocoding
      */
-    public String getAddress(GeoPoint p){
+    public String getAddress(GeoPoint p) {
         GeocoderNominatim geocoder = new GeocoderNominatim(userAgent);
         //GeocoderGraphHopper geocoder = new GeocoderGraphHopper(Locale.getDefault(), graphHopperApiKey);
         String theAddress;
@@ -637,8 +664,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             if (addresses.size() > 0) {
                 Address address = addresses.get(0);
                 int n = address.getMaxAddressLineIndex();
-                for (int i=0; i<=n; i++) {
-                    if (i!=0)
+                for (int i = 0; i <= n; i++) {
+                    if (i != 0)
                         sb.append(", ");
                     sb.append(address.getAddressLine(i));
                 }
@@ -658,9 +685,10 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     private class GeocodingTask extends AsyncTask<Object, Void, List<Address>> {
         int mIndex;
+
         protected List<Address> doInBackground(Object... params) {
-            String locationAddress = (String)params[0];
-            mIndex = (Integer)params[1];
+            String locationAddress = (String) params[0];
+            mIndex = (Integer) params[1];
             GeocoderNominatim geocoder = new GeocoderNominatim(userAgent);
             geocoder.setOptions(true); //ask for enclosing polygon (if any)
             //GeocoderGraphHopper geocoder = new GeocoderGraphHopper(Locale.getDefault(), graphHopperApiKey);
@@ -674,6 +702,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                 return null;
             }
         }
+
         protected void onPostExecute(List<Address> foundAdresses) {
             if (foundAdresses == null) {
                 Toast.makeText(getApplicationContext(), "Geocoding error", Toast.LENGTH_SHORT).show();
@@ -682,12 +711,12 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             } else {
                 Address address = foundAdresses.get(0); //get first address
                 String addressDisplayName = address.getExtras().getString("display_name");
-                if (mIndex == START_INDEX){
+                if (mIndex == START_INDEX) {
                     startPoint = new GeoPoint(address.getLatitude(), address.getLongitude());
                     markerStart = updateItineraryMarker(markerStart, startPoint, START_INDEX,
                             R.string.departure, R.drawable.marker_departure, -1, addressDisplayName);
                     map.getController().setCenter(startPoint);
-                } else if (mIndex == DEST_INDEX){
+                } else if (mIndex == DEST_INDEX) {
                     destinationPoint = new GeoPoint(address.getLatitude(), address.getLongitude());
                     markerDestination = updateItineraryMarker(markerDestination, destinationPoint, DEST_INDEX,
                             R.string.destination, R.drawable.marker_destination, -1, addressDisplayName);
@@ -696,7 +725,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                 getRoadAsync();
                 //get and display enclosing polygon:
                 Bundle extras = address.getExtras();
-                if (extras != null && extras.containsKey("polygonpoints")){
+                if (extras != null && extras.containsKey("polygonpoints")) {
                     ArrayList<GeoPoint> polygon = extras.getParcelableArrayList("polygonpoints");
                     //Log.d("DEBUG", "polygon:"+polygon.size());
                     updateUIWithPolygon(polygon, addressDisplayName);
@@ -710,27 +739,27 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     /**
      * Geocoding of the departure or destination address
      */
-    public void handleSearchButton(int index, int editResId){
-        EditText locationEdit = (EditText)findViewById(editResId);
+    public void handleSearchButton(int index, int editResId) {
+        EditText locationEdit = (EditText) findViewById(editResId);
         //Hide the soft keyboard:
-        InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
         imm.hideSoftInputFromWindow(locationEdit.getWindowToken(), 0);
 
         String locationAddress = locationEdit.getText().toString();
 
-        if (locationAddress.equals("")){
+        if (locationAddress.equals("")) {
             removePoint(index);
             map.invalidate();
             return;
         }
 
-        Toast.makeText(this, "Searching:\n"+locationAddress, Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "Searching:\n" + locationAddress, Toast.LENGTH_LONG).show();
         AutoCompleteOnPreferences.storePreference(this, locationAddress, SHARED_PREFS_APPKEY, PREF_LOCATIONS_KEY);
         new GeocodingTask().execute(locationAddress, index);
     }
 
     //add or replace the polygon overlay
-    public void updateUIWithPolygon(ArrayList<GeoPoint> polygon, String name){
+    public void updateUIWithPolygon(ArrayList<GeoPoint> polygon, String name) {
         List<Overlay> mapOverlays = map.getOverlays();
         int location = -1;
         if (mDestinationPolygon != null)
@@ -741,7 +770,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         mDestinationPolygon.setStrokeWidth(5.0f);
         mDestinationPolygon.setTitle(name);
         BoundingBox bb = null;
-        if (polygon != null){
+        if (polygon != null) {
             mDestinationPolygon.setPoints(polygon);
             bb = BoundingBox.fromGeoPoints(polygon);
         }
@@ -756,10 +785,12 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     //Async task to reverse-geocode the marker position in a separate thread:
     private class ReverseGeocodingTask extends AsyncTask<Marker, Void, String> {
         Marker marker;
+
         protected String doInBackground(Marker... params) {
             marker = params[0];
             return getAddress(marker.getPosition());
         }
+
         protected void onPostExecute(String result) {
             marker.setSnippet(result);
             marker.showInfoWindow();
@@ -769,9 +800,13 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     //------------ Itinerary markers
 
     class OnItineraryMarkerDragListener implements OnMarkerDragListener {
-        @Override public void onMarkerDrag(Marker marker) {}
-        @Override public void onMarkerDragEnd(Marker marker) {
-            int index = (Integer)marker.getRelatedObject();
+        @Override
+        public void onMarkerDrag(Marker marker) {
+        }
+
+        @Override
+        public void onMarkerDragEnd(Marker marker) {
+            int index = (Integer) marker.getRelatedObject();
             if (index == START_INDEX)
                 startPoint = marker.getPosition();
             else if (index == DEST_INDEX)
@@ -791,10 +826,12 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     final OnItineraryMarkerDragListener mItineraryListener = new OnItineraryMarkerDragListener();
 
-    /** Update (or create if null) a marker in itineraryMarkers. */
+    /**
+     * Update (or create if null) a marker in itineraryMarkers.
+     */
     public Marker updateItineraryMarker(Marker marker, GeoPoint p, int index,
                                         int titleResId, int markerResId, int imageResId, String address) {
-        if (marker == null){
+        if (marker == null) {
             marker = new Marker(map);
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
             marker.setInfoWindow(mViaPointInfoWindow);
@@ -820,23 +857,23 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         return marker;
     }
 
-    public void addViaPoint(GeoPoint p){
+    public void addViaPoint(GeoPoint p) {
         viaPoints.add(p);
         updateItineraryMarker(null, p, viaPoints.size() - 1,
                 R.string.viapoint, R.drawable.marker_via, -1, null);
     }
 
-    public void removePoint(int index){
-        if (index == START_INDEX){
+    public void removePoint(int index) {
+        if (index == START_INDEX) {
             startPoint = null;
-            if (markerStart != null){
+            if (markerStart != null) {
                 markerStart.closeInfoWindow();
                 mItineraryMarkers.remove(markerStart);
                 markerStart = null;
             }
-        } else if (index == DEST_INDEX){
+        } else if (index == DEST_INDEX) {
             destinationPoint = null;
-            if (markerDestination != null){
+            if (markerDestination != null) {
                 markerDestination.closeInfoWindow();
                 mItineraryMarkers.remove(markerDestination);
                 markerDestination = null;
@@ -848,21 +885,21 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         getRoadAsync();
     }
 
-    public void updateUIWithItineraryMarkers(){
+    public void updateUIWithItineraryMarkers() {
         mItineraryMarkers.closeAllInfoWindows();
         mItineraryMarkers.getItems().clear();
         //Start marker:
-        if (startPoint != null){
+        if (startPoint != null) {
             markerStart = updateItineraryMarker(null, startPoint, START_INDEX,
                     R.string.departure, R.drawable.marker_departure, -1, null);
         }
         //Via-points markers if any:
-        for (int index=0; index<viaPoints.size(); index++){
+        for (int index = 0; index < viaPoints.size(); index++) {
             updateItineraryMarker(null, viaPoints.get(index), index,
                     R.string.viapoint, R.drawable.marker_via, -1, null);
         }
         //Destination marker if any:
-        if (destinationPoint != null){
+        if (destinationPoint != null) {
             markerDestination = updateItineraryMarker(null, destinationPoint, DEST_INDEX,
                     R.string.destination, R.drawable.marker_destination, -1, null);
         }
@@ -870,24 +907,24 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     //------------ Route and Directions
 
-    private void putRoadNodes(Road road){
+    private void putRoadNodes(Road road) {
         mRoadNodeMarkers.getItems().clear();
         Drawable icon = ResourcesCompat.getDrawable(getResources(), R.drawable.marker_node, null);
         int n = road.mNodes.size();
         MarkerInfoWindow infoWindow = new MarkerInfoWindow(org.osmdroid.bonuspack.R.layout.bonuspack_bubble, map);
         TypedArray iconIds = getResources().obtainTypedArray(R.array.direction_icons);
-        for (int i=0; i<n; i++){
+        for (int i = 0; i < n; i++) {
             RoadNode node = road.mNodes.get(i);
-            String instructions = (node.mInstructions==null ? "" : node.mInstructions);
+            String instructions = (node.mInstructions == null ? "" : node.mInstructions);
             Marker nodeMarker = new Marker(map);
-            nodeMarker.setTitle(getString(R.string.step)+ " " + (i+1));
+            nodeMarker.setTitle(getString(R.string.step) + " " + (i + 1));
             nodeMarker.setSnippet(instructions);
             nodeMarker.setSubDescription(Road.getLengthDurationText(this, node.mLength, node.mDuration));
             nodeMarker.setPosition(node.mLocation);
             nodeMarker.setIcon(icon);
             nodeMarker.setInfoWindow(infoWindow); //use a shared infowindow.
             int iconId = iconIds.getResourceId(node.mManeuverType, R.drawable.ic_empty);
-            if (iconId != R.drawable.ic_empty){
+            if (iconId != R.drawable.ic_empty) {
                 Drawable image = ResourcesCompat.getDrawable(getResources(), iconId, null);
                 nodeMarker.setImage(image);
             }
@@ -897,13 +934,13 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         iconIds.recycle();
     }
 
-    void selectRoad(int roadIndex){
+    void selectRoad(int roadIndex) {
         mSelectedRoad = roadIndex;
         putRoadNodes(mRoads[roadIndex]);
         //Set route info in the text view:
-        TextView textView = (TextView)findViewById(R.id.routeInfo);
+        TextView textView = (TextView) findViewById(R.id.routeInfo);
         textView.setText(mRoads[roadIndex].getLengthDurationText(this, -1));
-        for (int i=0; i<mRoadOverlays.length; i++){
+        for (int i = 0; i < mRoadOverlays.length; i++) {
             Paint p = mRoadOverlays[i].getPaint();
             if (i == roadIndex)
                 p.setColor(0x800000FF); //blue
@@ -913,9 +950,10 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         map.invalidate();
     }
 
-    class RoadOnClickListener implements Polyline.OnClickListener{
-        @Override public boolean onClick(Polyline polyline, MapView mapView, GeoPoint eventPos){
-            int selectedRoad = (Integer)polyline.getRelatedObject();
+    class RoadOnClickListener implements Polyline.OnClickListener {
+        @Override
+        public boolean onClick(Polyline polyline, MapView mapView, GeoPoint eventPos) {
+            int selectedRoad = (Integer) polyline.getRelatedObject();
             selectRoad(selectedRoad);
             polyline.setInfoWindowLocation(eventPos);
             polyline.showInfoWindow();
@@ -923,13 +961,13 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         }
     }
 
-    void updateUIWithRoads(Road[] roads){
+    void updateUIWithRoads(Road[] roads) {
         mRoadNodeMarkers.getItems().clear();
-        TextView textView = (TextView)findViewById(R.id.routeInfo);
+        TextView textView = (TextView) findViewById(R.id.routeInfo);
         textView.setText("");
         List<Overlay> mapOverlays = map.getOverlays();
-        if (mRoadOverlays != null){
-            for (int i=0; i<mRoadOverlays.length; i++)
+        if (mRoadOverlays != null) {
+            for (int i = 0; i < mRoadOverlays.length; i++)
                 mapOverlays.remove(mRoadOverlays[i]);
             mRoadOverlays = null;
         }
@@ -940,7 +978,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         else if (roads[0].mStatus > Road.STATUS_TECHNICAL_ISSUE) //functional issues
             Toast.makeText(map.getContext(), "No possible route here", Toast.LENGTH_SHORT).show();
         mRoadOverlays = new Polyline[roads.length];
-        for (int i=0; i<roads.length; i++) {
+        for (int i = 0; i < roads.length; i++) {
             Polyline roadPolyline = RoadManager.buildRoadOverlay(roads[i]);
             mRoadOverlays[i] = roadPolyline;
             if (mWhichRouteProvider == GRAPHHOPPER_BICYCLE || mWhichRouteProvider == GRAPHHOPPER_PEDESTRIAN) {
@@ -957,6 +995,9 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             //to avoid covering the other overlays.
         }
         selectRoad(0);
+
+        // Start Sensor Service
+        doBindService();
     }
 
     /**
@@ -974,27 +1015,27 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             ArrayList<GeoPoint> waypoints = params[0];
             RoadManager roadManager;
             Locale locale = Locale.getDefault();
-            switch (mWhichRouteProvider){
+            switch (mWhichRouteProvider) {
                 case OSRM:
                     roadManager = new OSRMRoadManager(mContext, userAgent);
                     // Connecting to our own OSRM server
                     //((OSRMRoadManager)roadManager).setService("http://127.0.0.1:5000/");
-                    ((OSRMRoadManager)roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android emulator
-                    ((OSRMRoadManager)roadManager).setMean("route/v1/driving/");
+                    ((OSRMRoadManager) roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android emulator
+                    ((OSRMRoadManager) roadManager).setMean("route/v1/driving/");
                     break;
                 case GRAPHHOPPER_FASTEST:
                     roadManager = new GraphHopperRoadManager(graphHopperApiKey, false);
-                    roadManager.addRequestOption("locale="+locale.getLanguage());
+                    roadManager.addRequestOption("locale=" + locale.getLanguage());
                     break;
                 case GRAPHHOPPER_BICYCLE:
                     roadManager = new GraphHopperRoadManager(graphHopperApiKey, false);
-                    roadManager.addRequestOption("locale="+locale.getLanguage());
+                    roadManager.addRequestOption("locale=" + locale.getLanguage());
                     roadManager.addRequestOption("vehicle=bike");
                     //((GraphHopperRoadManager)roadManager).setElevation(true);
                     break;
                 case GRAPHHOPPER_PEDESTRIAN:
                     roadManager = new GraphHopperRoadManager(graphHopperApiKey, false);
-                    roadManager.addRequestOption("locale="+locale.getLanguage());
+                    roadManager.addRequestOption("locale=" + locale.getLanguage());
                     roadManager.addRequestOption("vehicle=foot");
                     //((GraphHopperRoadManager)roadManager).setElevation(true);
                     break;
@@ -1014,23 +1055,25 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         }
     }
 
-    public void getRoadAsync(){
+    public void getRoadAsync() {
         mRoads = null;
         GeoPoint roadStartPoint = null;
-        if (startPoint != null){
+        if (startPoint != null) {
             roadStartPoint = startPoint;
-        } else if (myLocationOverlay.isEnabled() && myLocationOverlay.getLocation() != null){
+        } else if (myLocationOverlay.isEnabled() && myLocationOverlay.getLocation() != null) {
             //use my current location as itinerary start point:
             roadStartPoint = myLocationOverlay.getLocation();
         }
-        if (roadStartPoint == null || destinationPoint == null){
+        if (roadStartPoint == null || destinationPoint == null) {
+            // Stop Sensor Service
+            doUnbindService();
             updateUIWithRoads(mRoads);
             return;
         }
         ArrayList<GeoPoint> waypoints = new ArrayList<GeoPoint>(2);
         waypoints.add(roadStartPoint);
         //add intermediate via points:
-        for (GeoPoint p:viaPoints){
+        for (GeoPoint p : viaPoints) {
             waypoints.add(p);
         }
         waypoints.add(destinationPoint);
@@ -1039,26 +1082,26 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     //----------------- POIs
 
-    void updateUIWithPOI(ArrayList<POI> pois, String featureTag){
-        if (pois != null){
+    void updateUIWithPOI(ArrayList<POI> pois, String featureTag) {
+        if (pois != null) {
             POIInfoWindow poiInfoWindow = new POIInfoWindow(map);
-            for (POI poi:pois){
+            for (POI poi : pois) {
                 Marker poiMarker = new Marker(map);
                 poiMarker.setTitle(poi.mType);
                 poiMarker.setSnippet(poi.mDescription);
                 poiMarker.setPosition(poi.mLocation);
                 Drawable icon = null;
-                if (poi.mServiceId == POI.POI_SERVICE_NOMINATIM || poi.mServiceId == POI.POI_SERVICE_OVERPASS_API){
+                if (poi.mServiceId == POI.POI_SERVICE_NOMINATIM || poi.mServiceId == POI.POI_SERVICE_OVERPASS_API) {
                     icon = ResourcesCompat.getDrawable(getResources(), R.drawable.marker_poi, null);
                     poiMarker.setAnchor(Marker.ANCHOR_CENTER, 1.0f);
-                } else if (poi.mServiceId == POI.POI_SERVICE_GEONAMES_WIKIPEDIA){
+                } else if (poi.mServiceId == POI.POI_SERVICE_GEONAMES_WIKIPEDIA) {
                     if (poi.mRank < 90)
                         icon = ResourcesCompat.getDrawable(getResources(), R.drawable.marker_poi_wikipedia_16, null);
                     else
                         icon = ResourcesCompat.getDrawable(getResources(), R.drawable.marker_poi_wikipedia_32, null);
-                } else if (poi.mServiceId == POI.POI_SERVICE_FLICKR){
+                } else if (poi.mServiceId == POI.POI_SERVICE_FLICKR) {
                     icon = ResourcesCompat.getDrawable(getResources(), R.drawable.marker_poi_flickr, null);
-                } else if (poi.mServiceId == POI.POI_SERVICE_PICASA){
+                } else if (poi.mServiceId == POI.POI_SERVICE_PICASA) {
                     icon = ResourcesCompat.getDrawable(getResources(), R.drawable.marker_poi_picasa_24, null);
                     poiMarker.setSubDescription(poi.mCategory);
                 }
@@ -1074,7 +1117,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         map.invalidate();
     }
 
-    void setMarkerIconAsPhoto(Marker marker, Bitmap thumbnail){
+    void setMarkerIconAsPhoto(Marker marker, Bitmap thumbnail) {
         int borderSize = 2;
         thumbnail = Bitmap.createScaledBitmap(thumbnail, 48, 48, true);
         Bitmap withBorder = Bitmap.createBitmap(thumbnail.getWidth() + borderSize * 2, thumbnail.getHeight() + borderSize * 2, thumbnail.getConfig());
@@ -1088,26 +1131,33 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     ExecutorService mThreadPool = Executors.newFixedThreadPool(3);
 
     class ThumbnailLoaderTask implements Runnable {
-        POI mPoi; Marker mMarker;
-        ThumbnailLoaderTask(POI poi, Marker marker){
-            mPoi = poi; mMarker = marker;
+        POI mPoi;
+        Marker mMarker;
+
+        ThumbnailLoaderTask(POI poi, Marker marker) {
+            mPoi = poi;
+            mMarker = marker;
         }
-        @Override public void run(){
+
+        @Override
+        public void run() {
             Bitmap thumbnail = mPoi.getThumbnail();
-            if (thumbnail != null){
+            if (thumbnail != null) {
                 setMarkerIconAsPhoto(mMarker, thumbnail);
             }
         }
     }
 
-    /** Loads all thumbnails in background */
-    void startAsyncThumbnailsLoading(ArrayList<POI> pois){
+    /**
+     * Loads all thumbnails in background
+     */
+    void startAsyncThumbnailsLoading(ArrayList<POI> pois) {
         if (pois == null)
             return;
         //Try to stop existing threads:
         mThreadPool.shutdownNow();
         mThreadPool = Executors.newFixedThreadPool(3);
-        for (int i=0; i<pois.size(); i++){
+        for (int i = 0; i < pois.size(); i++) {
             final POI poi = pois.get(i);
             final Marker marker = mPoiMarkers.getItem(i);
             mThreadPool.submit(new ThumbnailLoaderTask(poi, marker));
@@ -1116,23 +1166,25 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     /**
      * Convert human readable feature to an OSM tag.
+     *
      * @param humanReadableFeature
      * @return OSM tag string: "k=v"
      */
-    String getOSMTag(String humanReadableFeature){
-        HashMap<String,String> map = BonusPackHelper.parseStringMapResource(getApplicationContext(), R.array.osm_poi_tags);
+    String getOSMTag(String humanReadableFeature) {
+        HashMap<String, String> map = BonusPackHelper.parseStringMapResource(getApplicationContext(), R.array.osm_poi_tags);
         return map.get(humanReadableFeature.toLowerCase(Locale.getDefault()));
     }
 
     private class POILoadingTask extends AsyncTask<String, Void, ArrayList<POI>> {
         String mFeatureTag;
         String message;
+
         protected ArrayList<POI> doInBackground(String... params) {
             mFeatureTag = params[0];
             BoundingBox bb = map.getBoundingBox();
-            if (mFeatureTag == null || mFeatureTag.equals("")){
+            if (mFeatureTag == null || mFeatureTag.equals("")) {
                 return null;
-            } else if (mFeatureTag.equals("wikipedia")){
+            } else if (mFeatureTag.equals("wikipedia")) {
                 GeoNamesPOIProvider poiProvider = new GeoNamesPOIProvider(geonamesAccount);
                 //Get POI inside the bounding box of the current map view:
                 ArrayList<POI> pois = poiProvider.getPOIInside(bb, 30);
@@ -1140,7 +1192,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             } else {
                 OverpassAPIProvider overpassProvider = new OverpassAPIProvider();
                 String osmTag = getOSMTag(mFeatureTag);
-                if (osmTag == null){
+                if (osmTag == null) {
                     message = mFeatureTag + " is not a valid feature.";
                     return null;
                 }
@@ -1149,25 +1201,26 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                 return pois;
             }
         }
+
         protected void onPostExecute(ArrayList<POI> pois) {
             mPOIs = pois;
-            if (mFeatureTag == null || mFeatureTag.equals("")){
+            if (mFeatureTag == null || mFeatureTag.equals("")) {
                 //no search, no message
-            } else if (mPOIs == null){
+            } else if (mPOIs == null) {
                 if (message != null)
                     Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
                 else
-                    Toast.makeText(getApplicationContext(), "Technical issue when getting "+mFeatureTag+ " POI.", Toast.LENGTH_LONG).show();
+                    Toast.makeText(getApplicationContext(), "Technical issue when getting " + mFeatureTag + " POI.", Toast.LENGTH_LONG).show();
             } else {
-                Toast.makeText(getApplicationContext(), mFeatureTag+ " found:"+mPOIs.size(), Toast.LENGTH_LONG).show();
+                Toast.makeText(getApplicationContext(), mFeatureTag + " found:" + mPOIs.size(), Toast.LENGTH_LONG).show();
             }
             updateUIWithPOI(mPOIs, mFeatureTag);
-            if (mFeatureTag.equals("flickr")||mFeatureTag.startsWith("picasa")||mFeatureTag.equals("wikipedia"))
+            if (mFeatureTag.equals("flickr") || mFeatureTag.startsWith("picasa") || mFeatureTag.equals("wikipedia"))
                 startAsyncThumbnailsLoading(mPOIs);
         }
     }
 
-    void getPOIAsync(String tag){
+    void getPOIAsync(String tag) {
         mPoiMarkers.getItems().clear();
         new POILoadingTask().execute(tag);
     }
@@ -1175,7 +1228,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     //------------ KML handling
 
     static final int PICK_KML_FILE = 18;
-    void openLoadFileDialog(){
+
+    void openLoadFileDialog() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
@@ -1183,14 +1237,15 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     }
 
     static final int SAVE_KML_FILE = 19;
-    void openSaveFileDialog(){
+
+    void openSaveFileDialog() {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
         startActivityForResult(intent, SAVE_KML_FILE);
     }
 
-    void openUrlDialog(){
+    void openUrlDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle(getString(R.string.url_kml_open));
         final EditText input = new EditText(this);
@@ -1200,7 +1255,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         input.setText(uri);
         builder.setView(input);
         builder.setPositiveButton(getString(R.string.ok), new DialogInterface.OnClickListener() {
-            @Override public void onClick(DialogInterface dialog, int which) {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
                 String uri = input.getText().toString();
                 SharedPreferences prefs = getSharedPreferences("OSMNAVIGATOR", MODE_PRIVATE);
                 prefs.edit().putString("KML_URI", uri).apply();
@@ -1209,14 +1265,15 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             }
         });
         builder.setNegativeButton(getString(R.string.cancel), new DialogInterface.OnClickListener() {
-            @Override public void onClick(DialogInterface dialog, int which) {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
                 dialog.cancel();
             }
         });
         builder.show();
     }
 
-    void openOverpassAPIWizard(){
+    void openOverpassAPIWizard() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Overpass API Wizard");
         final EditText input = new EditText(this);
@@ -1225,7 +1282,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         input.setText(query);
         builder.setView(input);
         builder.setPositiveButton(getString(R.string.ok), new DialogInterface.OnClickListener() {
-            @Override public void onClick(DialogInterface dialog, int which) {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
                 String query = input.getText().toString();
                 SharedPreferences prefs = getSharedPreferences("OSMNAVIGATOR", MODE_PRIVATE);
                 prefs.edit().putString("OVERPASS_QUERY", query).apply();
@@ -1234,20 +1292,21 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             }
         });
         builder.setNegativeButton(getString(R.string.cancel), new DialogInterface.OnClickListener() {
-            @Override public void onClick(DialogInterface dialog, int which) {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
                 dialog.cancel();
             }
         });
         builder.show();
     }
 
-    boolean getKMLFromOverpass(String query){
+    boolean getKMLFromOverpass(String query) {
         OverpassAPIProvider overpassProvider = new OverpassAPIProvider();
         String oUrl = overpassProvider.urlForTagSearchKml(query, map.getBoundingBox(), 500, 30);
         return overpassProvider.addInKmlFolder(mKmlDocument.mKmlRoot, oUrl);
     }
 
-    ProgressDialog createSpinningDialog(String title){
+    ProgressDialog createSpinningDialog(String title) {
         ProgressDialog pd = new ProgressDialog(map.getContext());
         pd.setTitle(title);
         pd.setMessage(getString(R.string.wait));
@@ -1256,31 +1315,36 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         return pd;
     }
 
-    class KmlLoadingTask extends AsyncTask<Object, Void, Boolean>{
+    class KmlLoadingTask extends AsyncTask<Object, Void, Boolean> {
         String mUri;
         boolean mOnCreate;
         ProgressDialog mPD;
         String mMessage;
-        KmlLoadingTask(String message){
+
+        KmlLoadingTask(String message) {
             super();
             mMessage = message;
         }
-        @Override protected void onPreExecute() {
+
+        @Override
+        protected void onPreExecute() {
             mPD = createSpinningDialog(mMessage);
             mPD.show();
         }
-        @Override protected Boolean doInBackground(Object... params) {
-            mUri = (String)params[0];
-            mOnCreate = (Boolean)params[1];
-            boolean isOverpassRequest = (Boolean)params[2];
+
+        @Override
+        protected Boolean doInBackground(Object... params) {
+            mUri = (String) params[0];
+            mOnCreate = (Boolean) params[1];
+            boolean isOverpassRequest = (Boolean) params[2];
             mKmlDocument = new KmlDocument();
             boolean ok = false;
-            if (isOverpassRequest){
+            if (isOverpassRequest) {
                 //mUri contains the query
                 ok = getKMLFromOverpass(mUri);
             } else if (mUri.startsWith("http")) {
                 ok = mKmlDocument.parseKMLUrl(mUri);
-            } else if (mUri.startsWith("content://")){
+            } else if (mUri.startsWith("content://")) {
                 try {
                     Uri uri = Uri.parse(mUri);
                     InputStream inputStream = getContentResolver().openInputStream(uri);
@@ -1291,19 +1355,22 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                         ok = mKmlDocument.parseKMLStream(inputStream,null);
                      */
                     inputStream.close();
-                } catch (Exception e) { }
+                } catch (Exception e) {
+                }
             }
             return ok;
         }
-        @Override protected void onPostExecute(Boolean ok) {
+
+        @Override
+        protected void onPostExecute(Boolean ok) {
             if (mPD != null)
                 mPD.dismiss();
             if (!ok)
-                Toast.makeText(getApplicationContext(), "Sorry, unable to read "+mUri, Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), "Sorry, unable to read " + mUri, Toast.LENGTH_SHORT).show();
             updateUIWithKml();
-            if (ok){
+            if (ok) {
                 BoundingBox bb = mKmlDocument.mKmlRoot.getBoundingBox();
-                if (bb != null){
+                if (bb != null) {
                     if (!mOnCreate)
                         setViewOn(bb);
                     else  //KO in onCreate (osmdroid bug) - Workaround:
@@ -1313,12 +1380,14 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         }
     }
 
-    void openFile(String uri, boolean onCreate, boolean isOverpassRequest){
-        new KmlLoadingTask(getString(R.string.loading)+" "+uri).execute(uri, onCreate, isOverpassRequest);
+    void openFile(String uri, boolean onCreate, boolean isOverpassRequest) {
+        new KmlLoadingTask(getString(R.string.loading) + " " + uri).execute(uri, onCreate, isOverpassRequest);
     }
 
-    /** save fileName locally, as KML or GeoJSON depending on the extension */
-    void saveFile(Uri uri){
+    /**
+     * save fileName locally, as KML or GeoJSON depending on the extension
+     */
+    void saveFile(Uri uri) {
         try {
             ParcelFileDescriptor pfd = getContentResolver().openFileDescriptor(uri, "w");
             FileOutputStream fileOutputStream = new FileOutputStream(pfd.getFileDescriptor());
@@ -1334,39 +1403,39 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             pfd.close();
             Toast.makeText(this, uri.toString() + " saved", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            Toast.makeText(this, "Unable to save "+uri.toString(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Unable to save " + uri.toString(), Toast.LENGTH_SHORT).show();
         }
     }
 
-    Style buildDefaultStyle(){
+    Style buildDefaultStyle() {
         Drawable defaultKmlMarker = ResourcesCompat.getDrawable(getResources(), R.drawable.marker_kml_point, null);
-        Bitmap bitmap = ((BitmapDrawable)defaultKmlMarker).getBitmap();
+        Bitmap bitmap = ((BitmapDrawable) defaultKmlMarker).getBitmap();
         return new Style(bitmap, 0x901010AA, 3.0f, 0x20AA1010);
     }
 
-    void updateUIWithKml(){
-        if (mKmlOverlay != null){
+    void updateUIWithKml() {
+        if (mKmlOverlay != null) {
             mKmlOverlay.closeAllInfoWindows();
             map.getOverlays().remove(mKmlOverlay);
         }
-        mKmlOverlay = (FolderOverlay)mKmlDocument.mKmlRoot.buildOverlay(map, buildDefaultStyle(), null, mKmlDocument);
+        mKmlOverlay = (FolderOverlay) mKmlDocument.mKmlRoot.buildOverlay(map, buildDefaultStyle(), null, mKmlDocument);
         map.getOverlays().add(mKmlOverlay);
         map.invalidate();
     }
 
-    void insertOverlaysInKml(){
+    void insertOverlaysInKml() {
         KmlFolder root = mKmlDocument.mKmlRoot;
         //Insert relevant overlays inside:
-        if (mItineraryMarkers.getItems().size()>0)
+        if (mItineraryMarkers.getItems().size() > 0)
             root.addOverlay(mItineraryMarkers, mKmlDocument);
-        if (mRoadOverlays != null){
-            for (int i=0; i<mRoadOverlays.length; i++)
+        if (mRoadOverlays != null) {
+            for (int i = 0; i < mRoadOverlays.length; i++)
                 root.addOverlay(mRoadOverlays[i], mKmlDocument);
         }
-        if (mRoadNodeMarkers.getItems().size()>0)
+        if (mRoadNodeMarkers.getItems().size() > 0)
             root.addOverlay(mRoadNodeMarkers, mKmlDocument);
         root.addOverlay(mDestinationPolygon, mKmlDocument);
-        if (mPoiMarkers.getItems().size()>0){
+        if (mPoiMarkers.getItems().size() > 0) {
             root.addOverlay(mPoiMarkers, mKmlDocument);
         }
     }
@@ -1374,20 +1443,22 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     //Async task to reverse-geocode the KML point in a separate thread:
     private class KMLGeocodingTask extends AsyncTask<KmlPlacemark, Void, String> {
         KmlPlacemark kmlPoint;
+
         protected String doInBackground(KmlPlacemark... params) {
             kmlPoint = params[0];
             return getAddress(((KmlPoint) kmlPoint.mGeometry).getPosition());
         }
+
         protected void onPostExecute(String result) {
             kmlPoint.mName = result;
             updateUIWithKml();
         }
     }
 
-    void addKmlPoint(GeoPoint position){
+    void addKmlPoint(GeoPoint position) {
         KmlFeature kmlPoint = new KmlPlacemark(position);
         mKmlDocument.mKmlRoot.add(kmlPoint);
-        new KMLGeocodingTask().execute((KmlPlacemark)kmlPoint);
+        new KMLGeocodingTask().execute((KmlPlacemark) kmlPoint);
         updateUIWithKml();
     }
 
@@ -1395,28 +1466,32 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     GeoPoint mClickedGeoPoint; //any other way to pass the position to the menu ???
 
-    @Override public boolean longPressHelper(GeoPoint p) {
+    @Override
+    public boolean longPressHelper(GeoPoint p) {
         mClickedGeoPoint = p;
-        Button searchButton = (Button)findViewById(R.id.buttonSearchDest);
+        Button searchButton = (Button) findViewById(R.id.buttonSearchDest);
         openContextMenu(searchButton);
         //menu is hooked on the "Search Destination" button, as it must be hooked somewhere.
         return true;
     }
 
-    @Override public boolean singleTapConfirmedHelper(GeoPoint p) {
+    @Override
+    public boolean singleTapConfirmedHelper(GeoPoint p) {
         InfoWindow.closeAllInfoWindowsOn(map);
         return true;
     }
 
     //----------- Context Menu when clicking on the map
-    @Override public void onCreateContextMenu(ContextMenu menu, View v,
-                                              ContextMenuInfo menuInfo) {
+    @Override
+    public void onCreateContextMenu(ContextMenu menu, View v,
+                                    ContextMenuInfo menuInfo) {
         super.onCreateContextMenu(menu, v, menuInfo);
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.map_menu, menu);
     }
 
-    @Override public boolean onContextItemSelected(MenuItem item) {
+    @Override
+    public boolean onContextItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.menu_departure:
                 startPoint = new GeoPoint(mClickedGeoPoint);
@@ -1446,11 +1521,12 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     //------------ Option Menu implementation
 
-    @Override public boolean onCreateOptionsMenu(Menu menu) {
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
         MenuInflater inflater = getMenuInflater();
         inflater.inflate(R.menu.option_menu, menu);
 
-        switch (mWhichRouteProvider){
+        switch (mWhichRouteProvider) {
             case OSRM:
                 menu.findItem(R.id.menu_route_osrm).setChecked(true);
                 break;
@@ -1473,34 +1549,36 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                 menu.findItem(R.id.menu_tile_mapnik).setChecked(true);
             else
                 menu.findItem(R.id.menu_tile_mapnik_by_night).setChecked(true);
-        }
-        else if (map.getTileProvider().getTileSource() == MAPBOXSATELLITELABELLED)
+        } else if (map.getTileProvider().getTileSource() == MAPBOXSATELLITELABELLED)
             menu.findItem(R.id.menu_tile_mapbox_satellite).setChecked(true);
 
         return true;
     }
 
-    @Override public boolean onPrepareOptionsMenu(Menu menu) {
+    @Override
+    public boolean onPrepareOptionsMenu(Menu menu) {
         mFriendsManager.onPrepareOptionsMenu(menu);
 
-        if (mRoads != null && mRoads[mSelectedRoad].mNodes.size()>0)
+        if (mRoads != null && mRoads[mSelectedRoad].mNodes.size() > 0)
             menu.findItem(R.id.menu_itinerary).setEnabled(true);
         else
             menu.findItem(R.id.menu_itinerary).setEnabled(false);
 
-        if (mPOIs != null && mPOIs.size()>0)
+        if (mPOIs != null && mPOIs.size() > 0)
             menu.findItem(R.id.menu_pois).setEnabled(true);
         else
             menu.findItem(R.id.menu_pois).setEnabled(false);
         return true;
     }
 
-    /** return the index of the first Marker having its bubble opened, -1 if none */
+    /**
+     * return the index of the first Marker having its bubble opened, -1 if none
+     */
     static int getIndexOfBubbledMarker(List<? extends Overlay> list) {
-        for (int i=0; i<list.size(); i++){
+        for (int i = 0; i < list.size(); i++) {
             Overlay item = list.get(i);
-            if (item instanceof Marker){
-                Marker marker = (Marker)item;
+            if (item instanceof Marker) {
+                Marker marker = (Marker) item;
                 if (marker.isInfoWindowShown())
                     return i;
             }
@@ -1508,15 +1586,15 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         return -1;
     }
 
-    void setStdTileProvider(){
-        if (!(map.getTileProvider() instanceof MapTileProviderBasic)){
+    void setStdTileProvider() {
+        if (!(map.getTileProvider() instanceof MapTileProviderBasic)) {
             MapTileProviderBasic bitmapProvider = new MapTileProviderBasic(this);
             map.setTileProvider(bitmapProvider);
         }
     }
 
-    boolean setMapsForgeTileProvider(){
-        String path = Environment.getExternalStorageDirectory().getPath()+"/mapsforge/";
+    boolean setMapsForgeTileProvider() {
+        String path = Environment.getExternalStorageDirectory().getPath() + "/mapsforge/";
         Toast.makeText(this, "Loading MapsForge .map files and rendering theme from " + path, Toast.LENGTH_LONG).show();
         File folder = new File(path);
         File[] listOfFiles = folder.listFiles();
@@ -1526,8 +1604,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         //Build a list with only .map files; get rendering config file if any:
         File renderingFile = null;
         ArrayList<File> listOfMapFiles = new ArrayList<>(listOfFiles.length);
-        for (File file:listOfFiles){
-            if (file.isFile() && file.getName().endsWith(".map")){
+        for (File file : listOfFiles) {
+            if (file.isFile() && file.getName().endsWith(".map")) {
                 listOfMapFiles.add(file);
             } else if (file.isFile() && file.getName().endsWith(".xml")) {
                 renderingFile = file;
@@ -1563,6 +1641,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             } else
                 return false;
         }
+
         protected void onPostExecute(Boolean result) {
             if (result)
                 Toast.makeText(map.getContext(), "Cache Purge successful", Toast.LENGTH_SHORT).show();
@@ -1571,12 +1650,14 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         }
     }
 
-    @Override public boolean onOptionsItemSelected(MenuItem item) {
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
         Intent myIntent;
         switch (item.getItemId()) {
             case R.id.menu_sensor:
-                myIntent = new Intent(this, SensorActivity.class);
-                startActivity(myIntent);
+                doBindService();
+                //startService(myIntent);
+                return true;
             case R.id.menu_sharing:
                 return mFriendsManager.onOptionsItemSelected(item);
             case R.id.menu_itinerary:
@@ -1681,23 +1762,23 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                 else
                     Toast.makeText(this, "No MapsForge map found", Toast.LENGTH_SHORT).show();
                 return true;
-            case R.id.menu_download_view_area:{
+            case R.id.menu_download_view_area: {
                 CacheManager cacheManager = new CacheManager(map);
                 int zoomMin = map.getZoomLevel();
-                int zoomMax = map.getZoomLevel()+4;
+                int zoomMax = map.getZoomLevel() + 4;
                 cacheManager.downloadAreaAsync(this, map.getBoundingBox(), zoomMin, zoomMax);
                 return true;
             }
-            case R.id.menu_clear_view_area:{
+            case R.id.menu_clear_view_area: {
                 new CacheClearer().execute();
                 return true;
             }
-            case R.id.menu_cache_usage:{
+            case R.id.menu_cache_usage: {
                 CacheManager cacheManager = new CacheManager(map);
-                long cacheUsage = cacheManager.currentCacheUsage()/(1024*1024);
-                long cacheCapacity = cacheManager.cacheCapacity()/(1024*1024);
-                float percent = 100.0f*cacheUsage/cacheCapacity;
-                String message = "Cache usage:\n"+cacheUsage+" Mo / "+cacheCapacity+" Mo = "+(int)percent + "%";
+                long cacheUsage = cacheManager.currentCacheUsage() / (1024 * 1024);
+                long cacheCapacity = cacheManager.cacheCapacity() / (1024 * 1024);
+                float percent = 100.0f * cacheUsage / cacheCapacity;
+                String message = "Cache usage:\n" + cacheUsage + " Mo / " + cacheCapacity + " Mo = " + (int) percent + "%";
                 Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
                 return true;
             }
@@ -1710,19 +1791,21 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     private final NetworkLocationIgnorer mIgnorer = new NetworkLocationIgnorer();
     long mLastTime = 0; // milliseconds
     double mSpeed = 0.0; // km/h
-    @Override public void onLocationChanged(final Location pLoc) {
+
+    @Override
+    public void onLocationChanged(final Location pLoc) {
         long currentTime = System.currentTimeMillis();
         if (mIgnorer.shouldIgnore(pLoc.getProvider(), currentTime))
             return;
         double dT = currentTime - mLastTime;
-        if (dT < 100.0){
+        if (dT < 100.0) {
             //Toast.makeText(this, pLoc.getProvider()+" dT="+dT, Toast.LENGTH_SHORT).show();
             return;
         }
         mLastTime = currentTime;
 
         GeoPoint newLocation = new GeoPoint(pLoc);
-        if (!myLocationOverlay.isEnabled()){
+        if (!myLocationOverlay.isEnabled()) {
             //we get the location for the first time:
             myLocationOverlay.setEnabled(true);
             map.getController().animateTo(newLocation);
@@ -1730,22 +1813,22 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
         GeoPoint prevLocation = myLocationOverlay.getLocation();
         myLocationOverlay.setLocation(newLocation);
-        myLocationOverlay.setAccuracy((int)pLoc.getAccuracy());
+        myLocationOverlay.setAccuracy((int) pLoc.getAccuracy());
 
-        if (prevLocation != null && pLoc.getProvider().equals(LocationManager.GPS_PROVIDER)){
+        if (prevLocation != null && pLoc.getProvider().equals(LocationManager.GPS_PROVIDER)) {
             mSpeed = pLoc.getSpeed() * 3.6;
             long speedInt = Math.round(mSpeed);
-            TextView speedTxt = (TextView)findViewById(R.id.speed);
+            TextView speedTxt = (TextView) findViewById(R.id.speed);
             speedTxt.setText(speedInt + " km/h");
 
             //TODO: check if speed is not too small
-            if (mSpeed >= 0.1){
+            if (mSpeed >= 0.1) {
                 mAzimuthAngleSpeed = pLoc.getBearing();
                 myLocationOverlay.setBearing(mAzimuthAngleSpeed);
             }
         }
 
-        if (mTrackingMode){
+        if (mTrackingMode) {
             //keep the map view centered on current location:
             map.getController().animateTo(newLocation);
             map.setMapOrientation(-mAzimuthAngleSpeed);
@@ -1760,7 +1843,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     }
 
     static int[] TrackColor = {
-            Color.CYAN-0x20000000, Color.BLUE-0x20000000, Color.MAGENTA-0x20000000, Color.RED-0x20000000, Color.YELLOW-0x20000000
+            Color.CYAN - 0x20000000, Color.BLUE - 0x20000000, Color.MAGENTA - 0x20000000, Color.RED - 0x20000000, Color.YELLOW - 0x20000000
     };
 
     KmlTrack createTrack(String id, String name) {
@@ -1778,7 +1861,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             color = color % TrackColor.length;
             color = TrackColor[color];
         } catch (NumberFormatException e) {
-            color = Color.GREEN-0x20000000;
+            color = Color.GREEN - 0x20000000;
         }
         s.mLineStyle = new LineStyle(color, 8.0f);
         p.mStyle = mKmlDocument.addStyle(s);
@@ -1795,7 +1878,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             //id already defined but is not a PlaceMark
             return;
         else {
-            KmlPlacemark p = (KmlPlacemark)f;
+            KmlPlacemark p = (KmlPlacemark) f;
             if (!(p.mGeometry instanceof KmlTrack))
                 //id already defined but is not a Track
                 return;
@@ -1809,23 +1892,31 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         updateUIWithKml();
     }
 
-    @Override public void onProviderDisabled(String provider) {}
+    @Override
+    public void onProviderDisabled(String provider) {
+    }
 
-    @Override public void onProviderEnabled(String provider) {}
+    @Override
+    public void onProviderEnabled(String provider) {
+    }
 
-    @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+    }
 
     //------------ SensorEventListener implementation
-    @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
         myLocationOverlay.setAccuracy(accuracy);
         map.invalidate();
     }
 
     //static float mAzimuthOrientation = 0.0f;
-    @Override public void onSensorChanged(SensorEvent event) {
-        switch (event.sensor.getType()){
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        switch (event.sensor.getType()) {
             case Sensor.TYPE_ORIENTATION:
-                if (mSpeed < 0.1){
+                if (mSpeed < 0.1) {
 					/* TODO Filter to implement...
 					float azimuth = event.values[0];
 					if (Math.abs(azimuth-mAzimuthOrientation)>2.0f){
@@ -1851,7 +1942,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             super(name, zoomMinLevel, zoomMaxLevel, tileSizePixels, "");
         }
 
-        @Override public String getTileURLString(final long pMapTileIndex) {
+        @Override
+        public String getTileURLString(final long pMapTileIndex) {
             StringBuilder url = new StringBuilder("https://api.mapbox.com/styles/v1/mapbox/");
             url.append(getMapBoxMapId());
             url.append("/tiles/");
@@ -1864,6 +1956,120 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             url.append("?access_token=").append(getAccessToken());
             String res = url.toString();
             return res;
+        }
+    }
+
+    private void getMatch(String coordinates, boolean annotations) {
+        Call<Match> call = RetrofitClient.getInstance().getMyApi().getMatch(coordinates, annotations);
+        Log.e(BonusPackHelper.LOG_TAG, "Call URL: " + call.request().url().toString());
+        call.enqueue(new Callback<Match>() {
+            @Override
+            public void onResponse(Call<Match> call, Response<Match> response) {
+                Match match = response.body();
+                nodes = match.getMatchings()[0].getLegs()[0].getAnnotation().getNodes();
+            }
+
+            @Override
+            public void onFailure(Call<Match> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "An error has occured", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    /**
+     * Handler of incoming messages from service.
+     */
+    class IncomingHandler extends Handler {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case SensorService.MSG_SET_VALUE:
+                    Toast.makeText(getApplicationContext(), "Received from service: " + msg.arg1,
+                            Toast.LENGTH_SHORT).show();
+                    break;
+                default:
+                    super.handleMessage(msg);
+            }
+        }
+    }
+
+    /**
+     * Target we publish for clients to send messages to IncomingHandler.
+     */
+    final Messenger mMessenger = new Messenger(new IncomingHandler());
+
+    /**
+     * Class for interacting with the main interface of the service.
+     */
+    private ServiceConnection mConnection = new ServiceConnection() {
+        public void onServiceConnected(ComponentName className,
+                                       IBinder service) {
+            // This is called when the connection with the service has been
+            // established, giving us the service object we can use to
+            // interact with the service.  We are communicating with our
+            // service through an IDL interface, so get a client-side
+            // representation of that from the raw service object.
+            mService = new Messenger(service);
+            // We want to monitor the service for as long as we are
+            // connected to it.
+            try {
+                Message msg = Message.obtain(null,
+                        SensorService.MSG_REGISTER_CLIENT);
+                msg.replyTo = mMessenger;
+                mService.send(msg);
+
+                // Give it some value as an example.
+                msg = Message.obtain(null,
+                        SensorService.MSG_SET_VALUE, this.hashCode(), 0);
+                mService.send(msg);
+            } catch (RemoteException e) {
+                // In this case the service has crashed before we could even
+                // do anything with it; we can count on soon being
+                // disconnected (and then reconnected if it can be restarted)
+                // so there is no need to do anything here.
+            }
+
+            // As part of the sample, tell the user what happened.
+            Toast.makeText(getApplicationContext(), R.string.remote_service_connected,
+                    Toast.LENGTH_SHORT).show();
+        }
+
+        public void onServiceDisconnected(ComponentName className) {
+            // This is called when the connection with the service has been
+            // unexpectedly disconnected -- that is, its process crashed.
+            mService = null;
+            // As part of the sample, tell the user what happened.
+            Toast.makeText(getApplicationContext(), R.string.remote_service_disconnected, Toast.LENGTH_SHORT).show();
+        }
+    };
+
+    void doBindService() {
+        // Establish a connection with the service.  We use an explicit
+        // class name because there is no reason to be able to let other
+        // applications replace our component.
+        bindService(new Intent(this, SensorService.class), mConnection, Context.BIND_AUTO_CREATE);
+        mIsBound = true;
+    }
+
+    void doUnbindService() {
+        if (mIsBound) {
+            // If we have received the service, and hence registered with
+            // it, then now is the time to unregister.
+            if (mService != null) {
+                try {
+                    Message msg = Message.obtain(null,
+                            SensorService.MSG_UNREGISTER_CLIENT);
+                    msg.replyTo = mMessenger;
+                    mService.send(msg);
+                } catch (RemoteException e) {
+                    // There is nothing special we need to do if the service
+                    // has crashed.
+                }
+            }
+
+            // Detach our existing connection.
+            unbindService(mConnection);
+            mIsBound = false;
         }
     }
 }
