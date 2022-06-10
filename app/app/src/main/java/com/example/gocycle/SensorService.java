@@ -49,17 +49,12 @@ import retrofit2.Callback;
 import retrofit2.Response;
 
 public class SensorService extends Service implements SensorEventListener {
-    // Binder given to clients
-    private final IBinder binder = new LocalBinder();
-
     final float kFilteringFactor = 0.5f;
     static float rollingX=0, rollingY=0, rollingZ=0;
     protected String mUserAgent = "com.example.gocycle/1.0";
     List list;
     private static final String TAG = SensorService.class.getSimpleName();
     private SensorManager sm = null;
-    /** For showing and hiding our notification. */
-    NotificationManager mNM;
     /** Keeps track of all current registered clients. */
     ArrayList<Messenger> mClients = new ArrayList<Messenger>();
     /** Holds last value set by a client. */
@@ -86,13 +81,6 @@ public class SensorService extends Service implements SensorEventListener {
      */
     static final int MSG_SET_VALUE = 3;
 
-    public class LocalBinder extends Binder {
-        SensorService getService() {
-            // Return this instance of SensorService so clients can call public methods
-            return SensorService.this;
-        }
-    }
-
     /**
      * Handler of incoming messages from clients.
      */
@@ -108,7 +96,7 @@ public class SensorService extends Service implements SensorEventListener {
                     break;
                 case MSG_SET_VALUE:
                     mValue = msg.arg1;
-                    for (int i=mClients.size()-1; i>=0; i--) {
+                    for (int i = mClients.size() - 1; i >= 0; i--) {
                         try {
                             mClients.get(i).send(Message.obtain(null,
                                     MSG_SET_VALUE, mValue, 0));
@@ -133,22 +121,31 @@ public class SensorService extends Service implements SensorEventListener {
 
     @Override
     public void onCreate() {
-        mNM = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         // Display a notification about us starting.
         Toast.makeText(this, R.string.remote_service_started, Toast.LENGTH_SHORT).show();
+
+        // Get a SensorManager instance
+        sm = (SensorManager)getSystemService(SENSOR_SERVICE);
+
+        list = sm.getSensorList(Sensor.TYPE_ACCELEROMETER_UNCALIBRATED);
+        if(list.size()>0){
+            sm.registerListener(this, (Sensor) list.get(0), SensorManager.SENSOR_DELAY_NORMAL);
+            Toast.makeText(getBaseContext(), "Found Accelerometer.", Toast.LENGTH_LONG).show();
+        }else{
+            Toast.makeText(getBaseContext(), "Error: No Accelerometer.", Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override
     public void onDestroy() {
-        // Cancel the persistent notification.
-        mNM.cancel(R.string.remote_service_started);
         // Tell the user we stopped.
         Toast.makeText(this, R.string.remote_service_stopped, Toast.LENGTH_SHORT).show();
     }
 
+    /*
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        /* Get a SensorManager instance */
+        // Get a SensorManager instance
         sm = (SensorManager)getSystemService(SENSOR_SERVICE);
 
         list = sm.getSensorList(Sensor.TYPE_ACCELEROMETER_UNCALIBRATED);
@@ -161,6 +158,7 @@ public class SensorService extends Service implements SensorEventListener {
 
         return START_STICKY;
     }
+     */
 
 
     @Nullable
@@ -194,12 +192,23 @@ public class SensorService extends Service implements SensorEventListener {
         String entry = values[0] + "," + values[1] + "," + values[2] + "\n"; //Unfiltered data
         String entry1 = accelX + "," + accelY + "," + accelZ + "\n"; //Filtered data
 
-        Log.e(TAG, entry1);
+        //Log.e(TAG, entry1);
 
         if(accelY > 5)
         {
             Log.e(TAG, "Duobe");
             //getMatch("23.957570,54.905317;23.963235,54.904361", true);
+            for (int i = mClients.size() - 1; i >= 0; i--) {
+                try {
+                    mClients.get(i).send(Message.obtain(null,
+                            MSG_SET_VALUE, 1738, 0));
+                } catch (RemoteException e) {
+                    // The client is dead.  Remove it from the list;
+                    // we are going through the list from back to front
+                    // so this is safe to do inside the loop.
+                    mClients.remove(i);
+                }
+            }
         }
     }
 }

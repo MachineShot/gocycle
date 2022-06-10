@@ -11,10 +11,10 @@ public class Node {
     private Integer id;
 
     @Column(name = "from_osm_id", nullable = false)
-    private Integer fromOsmId;
+    private Long fromOsmId;
 
     @Column(name = "to_osm_id", nullable = false)
-    private Integer toOsmId;
+    private Long toOsmId;
 
     @Column(name = "speed", nullable = false)
     private Double speed;
@@ -27,19 +27,19 @@ public class Node {
         this.speed = speed;
     }
 
-    public Integer getToOsmId() {
+    public Long getToOsmId() {
         return toOsmId;
     }
 
-    public void setToOsmId(Integer toOsmId) {
+    public void setToOsmId(Long toOsmId) {
         this.toOsmId = toOsmId;
     }
 
-    public Integer getFromOsmId() {
+    public Long getFromOsmId() {
         return fromOsmId;
     }
 
-    public void setFromOsmId(Integer fromOsmId) {
+    public void setFromOsmId(Long fromOsmId) {
         this.fromOsmId = fromOsmId;
     }
 

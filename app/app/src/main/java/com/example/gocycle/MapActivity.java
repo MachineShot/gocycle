@@ -200,7 +200,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     static String geonamesAccount;
     static String mapzenApiKey;
 
-    long[] nodes;
+    GeoPoint newLocation, prevLocation;
+    List<Node> nodes;
     /**
      * Messenger for communicating with service.
      */
@@ -1020,7 +1021,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                     roadManager = new OSRMRoadManager(mContext, userAgent);
                     // Connecting to our own OSRM server
                     //((OSRMRoadManager)roadManager).setService("http://127.0.0.1:5000/");
-                    ((OSRMRoadManager) roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android emulator
+                    //((OSRMRoadManager) roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android emulator
+                    ((OSRMRoadManager) roadManager).setService("http://192.168.1.167:5000/"); // to access localhost from device
                     ((OSRMRoadManager) roadManager).setMean("route/v1/driving/");
                     break;
                 case GRAPHHOPPER_FASTEST:
@@ -1804,14 +1806,16 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         }
         mLastTime = currentTime;
 
-        GeoPoint newLocation = new GeoPoint(pLoc);
+        newLocation = new GeoPoint(pLoc);
+        //GeoPoint newLocation = new GeoPoint(pLoc);
         if (!myLocationOverlay.isEnabled()) {
             //we get the location for the first time:
             myLocationOverlay.setEnabled(true);
             map.getController().animateTo(newLocation);
         }
 
-        GeoPoint prevLocation = myLocationOverlay.getLocation();
+        prevLocation = myLocationOverlay.getLocation();
+        //GeoPoint prevLocation = myLocationOverlay.getLocation();
         myLocationOverlay.setLocation(newLocation);
         myLocationOverlay.setAccuracy((int) pLoc.getAccuracy());
 
@@ -1959,19 +1963,42 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         }
     }
 
-    private void getMatch(String coordinates, boolean annotations) {
-        Call<Match> call = RetrofitClient.getInstance().getMyApi().getMatch(coordinates, annotations);
-        Log.e(BonusPackHelper.LOG_TAG, "Call URL: " + call.request().url().toString());
+    private void getMatch(String coordinates, boolean annotations, String radiuses) {
+        Call<Match> call = RetrofitClient.getInstance().getOSRMApi().getMatch(coordinates, annotations, radiuses);
+        Log.e(BonusPackHelper.LOG_TAG, "getMatch() Call URL: " + call.request().url().toString());
         call.enqueue(new Callback<Match>() {
             @Override
             public void onResponse(Call<Match> call, Response<Match> response) {
                 Match match = response.body();
-                nodes = match.getMatchings()[0].getLegs()[0].getAnnotation().getNodes();
+                long[] tmpNodes = match.getMatchings()[0].getLegs()[0].getAnnotation().getNodes();
+                for (int i = 0; i < tmpNodes.length - 1; i++) {
+                    Node tmp = new Node(tmpNodes[i], tmpNodes[i+1], 3);
+                    nodes.add(tmp);
+                    Log.e(BonusPackHelper.LOG_TAG, tmp.toString());
+                }
+                postNodes(nodes);
             }
 
             @Override
             public void onFailure(Call<Match> call, Throwable t) {
-                Toast.makeText(getApplicationContext(), "An error has occured", Toast.LENGTH_LONG).show();
+                Toast.makeText(getApplicationContext(), "An error has occured getMatch()", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void postNodes(List<Node> nodes) {
+        Call<Match> call = RetrofitClient.getInstance().getApi().postNodes(nodes);
+        Log.e(BonusPackHelper.LOG_TAG, "postNodes() Call URL: " + call.request().url().toString());
+        call.enqueue(new Callback<Match>() {
+            @Override
+            public void onResponse(Call<Match> call, Response<Match> response) {
+                Log.e(BonusPackHelper.LOG_TAG, "Response postNodes(): " + response.message());
+                nodes.clear();
+            }
+
+            @Override
+            public void onFailure(Call<Match> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "An error has occured postNodes()", Toast.LENGTH_LONG).show();
             }
         });
     }
@@ -1984,8 +2011,12 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case SensorService.MSG_SET_VALUE:
-                    Toast.makeText(getApplicationContext(), "Received from service: " + msg.arg1,
-                            Toast.LENGTH_SHORT).show();
+                    if(msg.arg1 == 1738) {
+                        String coords = prevLocation.getLongitude() + "," + prevLocation.getLatitude() + ";"
+                                + newLocation.getLongitude() + "," + newLocation.getLatitude();
+                        Log.e(BonusPackHelper.LOG_TAG, coords);
+                        getMatch(coords, true, "10;10");
+                    }
                     break;
                 default:
                     super.handleMessage(msg);
@@ -2047,6 +2078,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         // Establish a connection with the service.  We use an explicit
         // class name because there is no reason to be able to let other
         // applications replace our component.
+        nodes = new ArrayList<>();
         bindService(new Intent(this, SensorService.class), mConnection, Context.BIND_AUTO_CREATE);
         mIsBound = true;
     }
