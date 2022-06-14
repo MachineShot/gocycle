@@ -1022,7 +1022,8 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                     // Connecting to our own OSRM server
                     //((OSRMRoadManager)roadManager).setService("http://127.0.0.1:5000/");
                     //((OSRMRoadManager) roadManager).setService("http://10.0.2.2:5000/"); // to access localhost from android emulator
-                    ((OSRMRoadManager) roadManager).setService("http://192.168.1.167:5000/"); // to access localhost from device
+                    //((OSRMRoadManager) roadManager).setService("http://192.168.1.167:5000/"); // to access localhost from device
+                    ((OSRMRoadManager) roadManager).setService("http://osrm-gocycle.germanywestcentral.azurecontainer.io/");
                     ((OSRMRoadManager) roadManager).setMean("route/v1/driving/");
                     break;
                 case GRAPHHOPPER_FASTEST:
@@ -2015,6 +2016,7 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                         String coords = prevLocation.getLongitude() + "," + prevLocation.getLatitude() + ";"
                                 + newLocation.getLongitude() + "," + newLocation.getLatitude();
                         Log.e(BonusPackHelper.LOG_TAG, coords);
+                        Toast.makeText(getApplicationContext(), "Duobe", Toast.LENGTH_SHORT).show();
                         getMatch(coords, true, "10;10");
                     }
                     break;

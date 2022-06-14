@@ -11,8 +11,8 @@ import retrofit2.http.Query;
 
 public interface Api {
 
-    String OSRM_BASE_URL = "https://router.project-osrm.org/";
-    String API_BASE_URL = "http://192.168.1.167:8080/";
+    String OSRM_BASE_URL = "http://osrm-gocycle.germanywestcentral.azurecontainer.io/";
+    String API_BASE_URL = "https://gocycle.azurewebsites.net/";
     @GET("match/v1/driving/{coordinates}")
     Call<Match> getMatch(@Path("coordinates") String coordinates,
         @Query("annotations") boolean annotations,
