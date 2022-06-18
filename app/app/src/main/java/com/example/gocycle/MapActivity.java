@@ -143,6 +143,10 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+import androidx.core.splashscreen.SplashScreen;
+import androidx.core.splashscreen.SplashScreen.Companion.*;
+
+
 public class MapActivity extends Activity implements MapEventsReceiver, LocationListener, SensorEventListener, MapView.OnFirstLayoutListener {
     protected MapView map;
 
@@ -185,8 +189,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     boolean mIsRecordingTrack;
 
-    FriendsManager mFriendsManager;
-
     static String SHARED_PREFS_APPKEY = "GoCycle";
     static String PREF_LOCATIONS_KEY = "PREF_LOCATIONS";
 
@@ -213,6 +215,9 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Handle the splash screen transition.
+        SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
+
         super.onCreate(savedInstanceState);
 
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this));
@@ -431,10 +436,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
             }
         }
 
-        //Sharing
-        mFriendsManager = new FriendsManager(this, map);
-        mFriendsManager.onCreate(savedInstanceState);
-
         checkPermissions();
 
         Button menuButton = (Button) findViewById(R.id.buttonMenu);
@@ -531,7 +532,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         //STATIC - outState.putParcelableArrayList("poi", mPOIs);
         //STATIC - outState.putParcelable("kml", mKmlDocument);
         //STATIC - outState.putParcelable("friends", mFriends);
-        mFriendsManager.onSaveInstanceState(outState);
 
         savePrefs();
     }
@@ -539,10 +539,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent intent) {
         switch (requestCode) {
-            case FriendsManager.START_SHARING_REQUEST:
-            case FriendsManager.FRIENDS_REQUEST:
-                mFriendsManager.onActivityResult(requestCode, resultCode, intent);
-                break;
             case ROUTE_REQUEST:
                 if (resultCode == RESULT_OK) {
                     int nodeId = intent.getIntExtra("NODE_ID", 0);
@@ -616,10 +612,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         super.onResume();
         boolean isOneProviderEnabled = startLocationUpdates();
         myLocationOverlay.setEnabled(isOneProviderEnabled);
-        //TODO: not used currently
-        //mSensorManager.registerListener(this, mOrientation, SensorManager.SENSOR_DELAY_NORMAL);
-        //sensor listener is causing a high CPU consumption...
-        mFriendsManager.onResume();
     }
 
     @Override
@@ -628,8 +620,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             mLocationManager.removeUpdates(this);
         }
-        //TODO: mSensorManager.unregisterListener(this);
-        mFriendsManager.onPause();
         savePrefs();
     }
 
@@ -1558,22 +1548,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
         return true;
     }
 
-    @Override
-    public boolean onPrepareOptionsMenu(Menu menu) {
-        mFriendsManager.onPrepareOptionsMenu(menu);
-
-        if (mRoads != null && mRoads[mSelectedRoad].mNodes.size() > 0)
-            menu.findItem(R.id.menu_itinerary).setEnabled(true);
-        else
-            menu.findItem(R.id.menu_itinerary).setEnabled(false);
-
-        if (mPOIs != null && mPOIs.size() > 0)
-            menu.findItem(R.id.menu_pois).setEnabled(true);
-        else
-            menu.findItem(R.id.menu_pois).setEnabled(false);
-        return true;
-    }
-
     /**
      * return the index of the first Marker having its bubble opened, -1 if none
      */
@@ -1657,62 +1631,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
     public boolean onOptionsItemSelected(MenuItem item) {
         Intent myIntent;
         switch (item.getItemId()) {
-            case R.id.menu_sensor:
-                doBindService();
-                //startService(myIntent);
-                return true;
-            case R.id.menu_sharing:
-                return mFriendsManager.onOptionsItemSelected(item);
-            case R.id.menu_itinerary:
-                myIntent = new Intent(this, RouteActivity.class);
-                int currentNodeId = getIndexOfBubbledMarker(mRoadNodeMarkers.getItems());
-                myIntent.putExtra("SELECTED_ROAD", mSelectedRoad);
-                myIntent.putExtra("NODE_ID", currentNodeId);
-                startActivityForResult(myIntent, ROUTE_REQUEST);
-                return true;
-            case R.id.menu_pois:
-                myIntent = new Intent(this, POIActivity.class);
-                myIntent.putExtra("ID", getIndexOfBubbledMarker(mPoiMarkers.getItems()));
-                startActivityForResult(myIntent, POIS_REQUEST);
-                return true;
-            case R.id.menu_kml_url:
-                openUrlDialog();
-                return true;
-            case R.id.menu_open_file:
-                openLoadFileDialog();
-                return true;
-            case R.id.menu_overpass_api:
-                openOverpassAPIWizard();
-                return true;
-            case R.id.menu_kml_record_track:
-                mIsRecordingTrack = !mIsRecordingTrack;
-                mFriendsManager.setTracksRecording(mIsRecordingTrack);
-                if (mIsRecordingTrack)
-                    item.setTitle(R.string.menu_kml_stop_record_tracks);
-                else
-                    item.setTitle(R.string.menu_kml_record_tracks);
-                return true;
-            case R.id.menu_kml_get_overlays:
-                insertOverlaysInKml();
-                updateUIWithKml();
-                return true;
-            case R.id.menu_kml_tree:
-                myIntent = new Intent(this, KmlTreeActivity.class);
-                //myIntent.putExtra("KML", mKmlDocument.kmlRoot);
-                mKmlStack.push(mKmlDocument.mKmlRoot);
-                startActivityForResult(myIntent, KmlTreeActivity.KML_TREE_REQUEST);
-                return true;
-            case R.id.menu_kml_styles:
-                myIntent = new Intent(this, KmlStylesActivity.class);
-                startActivityForResult(myIntent, KmlStylesActivity.KML_STYLES_REQUEST);
-                return true;
-            case R.id.menu_save_file:
-                openSaveFileDialog();
-                return true;
-            case R.id.menu_kml_clear:
-                mKmlDocument = new KmlDocument();
-                updateUIWithKml();
-                return true;
             case R.id.menu_route_osrm:
                 mWhichRouteProvider = OSRM;
                 item.setChecked(true);
@@ -1765,26 +1683,6 @@ public class MapActivity extends Activity implements MapEventsReceiver, Location
                 else
                     Toast.makeText(this, "No MapsForge map found", Toast.LENGTH_SHORT).show();
                 return true;
-            case R.id.menu_download_view_area: {
-                CacheManager cacheManager = new CacheManager(map);
-                int zoomMin = map.getZoomLevel();
-                int zoomMax = map.getZoomLevel() + 4;
-                cacheManager.downloadAreaAsync(this, map.getBoundingBox(), zoomMin, zoomMax);
-                return true;
-            }
-            case R.id.menu_clear_view_area: {
-                new CacheClearer().execute();
-                return true;
-            }
-            case R.id.menu_cache_usage: {
-                CacheManager cacheManager = new CacheManager(map);
-                long cacheUsage = cacheManager.currentCacheUsage() / (1024 * 1024);
-                long cacheCapacity = cacheManager.cacheCapacity() / (1024 * 1024);
-                float percent = 100.0f * cacheUsage / cacheCapacity;
-                String message = "Cache usage:\n" + cacheUsage + " Mo / " + cacheCapacity + " Mo = " + (int) percent + "%";
-                Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
-                return true;
-            }
             default:
                 return super.onOptionsItemSelected(item);
         }

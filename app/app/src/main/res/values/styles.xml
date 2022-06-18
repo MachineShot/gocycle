@@ -7,4 +7,11 @@
     <style name="MenuTextAppearance">
         <item name="android:textColor">#ffffff</item>
     </style>
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/teal_600</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_logo1_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.GoCycle</item>
+
+
+    </style>
 </resources>

@@ -19,6 +19,28 @@
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/option_menu.xml" value="0.36666666666666664" />
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/style_item_menu.xml" value="0.36666666666666664" />
         <entry key="..\:/KTU/PVP/git/gocycle/app/app/src/main/res/menu/style_option_menu.xml" value="0.36666666666666664" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/drawable/bg_gradient.xml" value="0.236" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/drawable/ic_baseline_pedal_bike_24.xml" value="0.236" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/drawable/ic_logo1_foreground.xml" value="0.1305" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/drawable/rounded_corners.xml" value="0.1" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/drawable/splash_background.xml" value="0.236" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/drawable/splash_fg.xml" value="0.1285" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/activity_splash_screen.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/item_layout.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/items_list.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/itinerary_bubble.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/kml_list_item.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/kml_main.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/kml_styles.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/main.xml" value="0.264" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/sensor.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/layout/start_sharing.xml" value="0.24547101449275363" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/menu/kml_item_menu.xml" value="0.25416666666666665" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/menu/map_menu.xml" value="0.25416666666666665" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/menu/option_menu.xml" value="0.25416666666666665" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/menu/style_item_menu.xml" value="0.25416666666666665" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/menu/style_option_menu.xml" value="0.25416666666666665" />
+        <entry key="..\:/Users/machi/Documents/GoCycle/gocycle/app/app/src/main/res/mipmap-anydpi-v26/ic_logo.xml" value="0.236" />
       </map>
     </option>
   </component>
