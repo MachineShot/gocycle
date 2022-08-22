@@ -12,8 +12,6 @@
   </p>
 </div>
 
-
-
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 <p>With the help of users, we collect data on the condition of the road used by bicycles and e-scooters.
@@ -23,6 +21,8 @@
 *  Different map rendering.
 *  Current location and speed.
 *  Route length and time.</p>
+
+https://user-images.githubusercontent.com/16322422/185904065-a5e08662-1fdb-4811-abd4-332a85af66bb.mp4
 
 ## Made with
 ![Android Studio](https://img.shields.io/badge/Android%20Studio-3DDC84.svg?style=for-the-badge&logo=android-studio&logoColor=white)
